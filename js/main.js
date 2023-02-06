@@ -517,6 +517,9 @@ $(function(){
         enabled: true,
         duration: 260,
         easing: 'ease-in',
+      },
+      image: {
+          titleSrc: 'title'
       }
     });
 
