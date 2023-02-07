@@ -519,7 +519,15 @@ $(function(){
         easing: 'ease-in',
       },
       image: {
-          titleSrc: 'title'
+          titleSrc: function(item){
+            let title = item.el.attr('title');
+
+            if(item.el.data('url')) {
+              return '<a href="'+ item.el.data('url') +'" target="_blank">'+ title +'</a>';
+            }
+
+            return title;
+          }
       }
     });
 
