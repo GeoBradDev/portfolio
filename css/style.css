@@ -645,16 +645,20 @@ About
 }
 
 .progress-bar-linear {
-    padding-top: 20px;
-    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+
+.progress-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
 }
 
 .progress-bar-text {
-    display: inline-block;
-    margin-left: 8px;
-    margin-bottom: 6px;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
 }
 
 .progress-cont {
@@ -663,6 +667,25 @@ About
     margin-right: 10px;
 }
 
+.progress-bar-level {
+    font-size: 14px;
+    font-weight: bold;
+    color: #555;
+}
+
+.progress-bar-skills {
+    background-color: #ddd;
+    border-radius: 5px;
+    overflow: hidden;
+    height: 10px;
+    position: relative;
+}
+
+.progress-bar-line {
+    height: 100%;
+    background-color: #4caf50; /* Main color for the progress bar */
+    transition: width 0.5s ease-in-out;
+}
 .progress-bar-linear .progress-bar-skills {
     position: relative;
     width: 100%;
@@ -686,6 +709,23 @@ About
     border-radius: 12px;
 }
 
+.skills-section {
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+}
+
+.section-title {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.section-description {
+    font-size: 16px;
+    margin-bottom: 20px;
+    color: #666;
+}
 
 /*----------------------------------------
 Services
