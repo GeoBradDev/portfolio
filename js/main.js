@@ -128,7 +128,7 @@ $(function(){
 
     // initialize Smooth Scrolling Only in Modern browsers
     if(animation) {
-    	jQuery.scrollSpeed(75, 100);
+    	jQuery.scrollSpeed(50, 500);
     }
 
 
