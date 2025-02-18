@@ -608,34 +608,52 @@ About
     margin-right: 4px;
 }
 
+/* Spacing for the social icon list */
 .social-list {
-    margin-top: 20px;
-    margin-bottom: 20px;
+    margin: 20px 0;
+    padding: 0;
+    list-style: none; /* Remove default list styles */
+    display: flex;
+    justify-content: center; /* Center the icons */
+    gap: 8px; /* Maintain spacing instead of setting margin per li */
 }
 
+/* Style for each list item */
 .social-list li {
     display: inline-block;
-    margin: 4px;
 }
 
+/* Style for the social icons */
 .social-list li a {
-    display: inline-block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 16px;
     width: 38px;
     height: 38px;
-    text-align: center;
-    line-height: 36px;
     color: #232323;
     border: 1px solid #888;
-    -webkit-border-radius: 50%;
-    -moz-border-radius: 50%;
     border-radius: 50%;
+    text-decoration: none;
+    transition: all 0.3s ease;
 }
 
-.social-list li:hover a {
+/* Hover effect */
+.social-list li a:hover {
     color: #fafafa;
     background-color: #232323;
     border-color: transparent;
+}
+
+.social-list li a img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    transition: filter 0.3s ease;
+}
+
+.social-list li a:hover img {
+    filter: invert(1);
 }
 
 .skills-section {
@@ -1155,6 +1173,17 @@ Footer
     font-size: 17px;
     color: #434343;
     margin: 0 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.footer-social-list li a img {
+    width: 17px;  /* Match font-size for consistency */
+    height: 17px;
+    object-fit: contain;
+    display: block;
 }
 
 .footer-social-list li a:hover {
