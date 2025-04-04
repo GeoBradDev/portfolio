@@ -103,6 +103,61 @@
         .download-btn:hover {
             background-color: #2980b9;
         }
+
+        .theme-toggle {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.9em;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .theme-toggle:hover {
+            background-color: #2980b9;
+        }
+
+        /* Dark mode styles applied via a class */
+        body.dark-mode {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .container {
+            background-color: #2a2a2a;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        body.dark-mode h1,
+        body.dark-mode h2,
+        body.dark-mode .job-title {
+            color: #f0f0f0;
+        }
+
+        body.dark-mode .skills-list li {
+            background-color: #3a3f44;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode a,
+        body.dark-mode .icon {
+            color: #82cfff;
+        }
+
+        body.dark-mode h2 {
+            border-color: #82cfff;
+        }
+
+        body.dark-mode .download-btn {
+            background-color: #2980b9;
+            color: white;
+        }
+
+        body.dark-mode .download-btn:hover {
+            background-color: #1c6391;
+        }
     </style>
 </head>
 <body>
@@ -117,15 +172,16 @@
                 href="https://www.linkedin.com/in/brad-stricherz-944999349/">LinkedIn</a> |
             <i class="fab fa-github icon"></i><a href="https://github.com/GeoBradDev">GitHub</a>
         </p>
+        <button id="theme-toggle" class="theme-toggle">🌙 Dark Mode</button>
     </header>
 
     <section class="section">
-        <h2><i class="fas fa-user icon"></i>Professional Summary</h2>
-        <p>Full-stack software developer with over 15 years of experience supporting the U.S. Government, specializing
-            in modern web and mobile applications. Founder and geospatial software developer with expertise in spatial
-            analysis, data visualization, and mapping solutions. Passionate about leveraging technology and data to
-            solve complex challenges and deliver meaningful outcomes.</p>
-    </section>
+    <h2><i class="fas fa-user icon"></i>Professional Summary</h2>
+    <p>Full-stack software developer with over 15 years of experience supporting the U.S. Government, specializing
+        in modern web and mobile applications. <strong>Holds active TS/SCI clearance with CI Polygraph.</strong> Founder and geospatial software developer with expertise in spatial
+        analysis, data visualization, and mapping solutions. Passionate about leveraging technology and data to
+        solve complex challenges and deliver meaningful outcomes.</p>
+</section>
 
     <section class="section">
         <h2><i class="fas fa-code icon"></i>Technical Skills</h2>
@@ -215,19 +271,42 @@
     <section class="section">
         <h2><i class="fas fa-certificate icon"></i>Certifications</h2>
         <ul>
-            <li>Graduate Certificate in
+            <li>Penn State Graduate Certificate in
                 Geospatial Programming and Web Map Development
             </li>
-            <li>GEOINT Professional Certification in
+            <li>GEOINT Professional Certifications in
                 Imagery Analysis, Geospatial Analysis, and Geospatial Data Management
             </li>
-            <li> DoD Certified Instructor in Python
+            <li> Department of Defense Certified Instructor in Python
             </li>
         </ul>
     </section>
+    <section class="section">
+
+        <h2><i class="fas fa-shield-alt icon"></i>Clearance</h2>
+        <p><strong>Top Secret / SCI with CI Polygraph (Active)</strong></p>
+    </section>
+
     <a href="resume.pdf" class="download-btn" download="Brad_Stricherz_Resume.pdf"><i class="fas fa-file-pdf"></i>
         Download PDF</a>
 </div>
+<script>
+    const toggleButton = document.getElementById('theme-toggle');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const currentTheme = localStorage.getItem('theme');
+
+    if (currentTheme === 'dark' || (!currentTheme && prefersDark)) {
+        document.body.classList.add('dark-mode');
+        toggleButton.textContent = '☀️ Light Mode';
+    }
+
+    toggleButton.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        toggleButton.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js" crossorigin="anonymous"></script>
 </body>
 </html>
