@@ -454,32 +454,41 @@
 <script src="js/isotope.pkgd.min.js"></script>
 <!-- Custom js -->
 <script>
-    const githubUsername = "GeoBradDev";
+    const githubUsers = [
+        "GeoBradDev",
+        "MapTheVoteSTL",
+        "Seaside-Sustainability-Web-GIS"
+    ];
     const portfolioContainer = document.getElementById("github-projects");
 
     async function loadPortfolio() {
         try {
-            const response = await fetch(`https://api.github.com/users/${githubUsername}/repos?per_page=100`);
-            const data = await response.json();
+            let allRepos = [];
 
-            if (data.message && data.message.toLowerCase().includes("api rate limit exceeded")) {
-                throw new Error("GitHub API rate limit exceeded. Please try again later.");
+            for (const user of githubUsers) {
+                const response = await fetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`);
+                const data = await response.json();
+
+                if (data.message && data.message.toLowerCase().includes("api rate limit exceeded")) {
+                    throw new Error("GitHub API rate limit exceeded. Please try again later.");
+                }
+
+                if (!Array.isArray(data)) {
+                    throw new Error("Unexpected GitHub response.");
+                }
+
+                allRepos = allRepos.concat(data);
             }
 
-            if (!Array.isArray(data)) {
-                throw new Error("Unexpected GitHub response.");
-            }
-
-            const portfolioRepos = data.filter(repo =>
-                repo.description?.toLowerCase().includes("portfolio")
-            );
+            const portfolioRepos = allRepos
+                .filter(repo => repo.description?.toLowerCase().includes("portfolio"))
+                .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
             if (portfolioRepos.length === 0) {
                 portfolioContainer.innerHTML = "<div class='col-12 text-center'><p class='text-muted'>No portfolio projects found.</p></div>";
                 return;
             }
 
-            // Clear existing content
             portfolioContainer.innerHTML = "";
 
             portfolioRepos.forEach((repo, index) => {
@@ -542,7 +551,8 @@
                 });
             });
 
-        } catch (error) {
+        } catch
+            (error) {
             console.error("❌ Error loading portfolio:", error.message);
             portfolioContainer.innerHTML = `<div class="col-12 text-center"><p style="color: #e74c3c; font-size: 16px;">⚠️ ${error.message}</p></div>`;
         } finally {
