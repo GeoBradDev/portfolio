@@ -8,6 +8,7 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
+            font-size: 14px;
             margin: 0;
             padding: 0;
             background-color: #f0f4f8;
@@ -26,6 +27,14 @@
         header {
             text-align: center;
             margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 24px
+        }
+
+        h2 {
+            font-size: 18px
         }
 
         h1, h2 {
@@ -163,8 +172,13 @@
 <body>
 
 <div class="container">
-    <header>
+    <header style="position: relative;">
         <h1>Brad Stricherz</h1>
+        <div style="position: absolute; top: -35px; left: -25px; display: flex; gap: 10px;">
+            <img src="img/qr_code.png" alt="QR Code" style="height: 80px; width: 80px; object-fit: contain;">
+            <img src="img/cesium.png" alt="Cesium Certified Developer"
+                 style="height: 80px; width: 80px; object-fit: contain;">
+        </div>
         <p class="contact-info">
             <i class="fas fa-envelope icon"></i><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a> |
             <i class="fas fa-phone icon"></i> <a href="tel:+16052700565">605-270-0565 </a> |
@@ -259,16 +273,12 @@
     <section class="section">
         <h2><i class="fas fa-certificate icon"></i>Certifications</h2>
         <ul>
-            <li>Penn State Graduate Certificate in
-                Geospatial Programming and Web Map Development
-            </li>
-            <li>GEOINT Professional Certifications in
-                Imagery Analysis, Geospatial Analysis, and Geospatial Data Management
-            </li>
-            <li> Department of Defense Certified Instructor in Python
-            </li>
-            <li> Cesium Certified Developer
-            </li>
+            <li>Penn State Graduate Certificate in Geospatial Programming and Web Map Development</li>
+            <li>GEOINT Professional Certifications in Imagery Analysis, Geospatial Analysis, and Geospatial Data
+                Management</li>
+            <li>Department of Defense Certified Instructor in Python</li>
+            <li> Cesium Certified Developer</li>
+            <li>Docker Foundations Professional Certificate</li>
         </ul>
     </section>
     <section class="section">
@@ -277,7 +287,8 @@
         <p><strong>Top Secret / SCI with CI Polygraph (Active)</strong></p>
     </section>
 
-    <a href="Brad%20Stricherz%20_%20Full%20Stack%20Developer.pdf" class="download-btn" download="Brad Stricherz _ Full Stack Developer.pdf"><i
+    <a href="Brad%20Stricherz%20_%20Full%20Stack%20Developer.pdf" class="download-btn"
+       download="Brad Stricherz _ Full Stack Developer.pdf"><i
             class="fas fa-file-pdf"></i>
         Download PDF</a>
 </div>
