@@ -117,3 +117,4 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/webstorm
 
 *.zip
+/C*.md
