@@ -8,33 +8,36 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
-            font-size: 14px;
+            font-size: 13px;
             margin: 0;
             padding: 0;
             background-color: #f0f4f8;
             color: #333;
+            line-height: 1.5;
         }
 
         .container {
             max-width: 800px;
-            margin: 40px auto;
+            margin: 30px auto;
             background-color: #ffffff;
-            padding: 30px;
+            padding: 28px 35px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             border-radius: 10px;
         }
 
         header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 22px;
         }
 
         h1 {
-            font-size: 24px
+            font-size: 24px;
+            margin: 0 0 10px 0;
         }
 
         h2 {
-            font-size: 18px
+            font-size: 17px;
+            margin-top: 0;
         }
 
         h1, h2 {
@@ -42,9 +45,9 @@
         }
 
         h2 {
-            border-bottom: 3px solid #3498db;
+            border-bottom: 2px solid #3498db;
             display: inline-block;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .contact-info a {
@@ -52,18 +55,30 @@
             text-decoration: none;
         }
 
+        .contact-info {
+            margin: 6px 0;
+            font-size: 12.5px;
+        }
+
         .section {
-            margin-bottom: 30px;
+            margin-bottom: 24px;
+        }
+
+        .section p {
+            margin: 10px 0;
+            line-height: 1.6;
         }
 
         ul {
             list-style-type: none;
             padding: 0;
+            margin: 8px 0;
         }
 
         li {
-            margin-bottom: 8px;
-            padding: 1px;
+            margin-bottom: 7px;
+            padding: 0;
+            line-height: 1.5;
         }
 
         .job-title {
@@ -71,15 +86,24 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-top: 14px;
+            margin-bottom: 6px;
+            font-size: 13.5px;
         }
 
         .skills-list li {
-            display: inline-block;
+            display: block;
             background-color: #eaf2f8;
-            margin: 4px;
-            padding: 6px 12px;
-            border-radius: 5px;
-            font-size: 0.9em;
+            margin: 6px 0;
+            padding: 8px 13px;
+            border-radius: 4px;
+            font-size: 12.5px;
+            line-height: 1.55;
+        }
+
+        .skills-list li strong {
+            color: #2c3e50;
+            margin-right: 7px;
         }
 
         .icon {
@@ -150,6 +174,10 @@
             color: #e0e0e0;
         }
 
+        body.dark-mode .skills-list li strong {
+            color: #82cfff;
+        }
+
         body.dark-mode a,
         body.dark-mode .icon {
             color: #82cfff;
@@ -167,17 +195,114 @@
         body.dark-mode .download-btn:hover {
             background-color: #1c6391;
         }
+
         .badge-container {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 5px;
+            right: 5px;
+        }
+
+        .badge-container img {
+            height: 60px !important;
+            width: 60px !important;
         }
 
         @media (max-width: 900px) {
             .badge-container {
                 display: none; /* Hide on mobile */
+            }
+        }
+
+        /* Print-specific styles for 2-page layout */
+        @media print {
+            body {
+                background-color: white;
+                font-size: 11.5px;
+                line-height: 1.45;
+            }
+
+            .container {
+                max-width: 100%;
+                margin: 0;
+                padding: 20px 25px;
+                box-shadow: none;
+                border-radius: 0;
+            }
+
+            header {
+                margin-bottom: 16px;
+            }
+
+            h1 {
+                font-size: 22px;
+                margin-bottom: 8px;
+            }
+
+            h2 {
+                font-size: 16px;
+                margin-bottom: 10px;
+                page-break-after: avoid;
+            }
+
+            .section {
+                margin-bottom: 18px;
+                page-break-inside: auto;
+            }
+
+            .section p {
+                margin: 7px 0;
+                line-height: 1.5;
+            }
+
+            .job-title {
+                margin-top: 10px;
+                margin-bottom: 5px;
+                font-size: 12.5px;
+                page-break-after: avoid;
+                page-break-inside: avoid;
+            }
+
+            .job-title + ul {
+                page-break-before: avoid;
+            }
+
+            ul {
+                margin: 6px 0;
+            }
+
+            li {
+                margin-bottom: 5px;
+                line-height: 1.45;
+            }
+
+            .skills-list li {
+                margin: 5px 0;
+                padding: 6px 11px;
+                font-size: 11.5px;
+            }
+
+            .contact-info {
+                font-size: 11.5px;
+            }
+
+            .theme-toggle {
+                display: none;
+            }
+
+            .download-btn {
+                display: none;
+            }
+
+            a {
+                color: #333;
+                text-decoration: none;
+            }
+
+            .badge-container img {
+                height: 50px !important;
+                width: 50px !important;
             }
         }
     </style>
@@ -188,8 +313,9 @@
     <header style="position: relative;">
         <h1>Brad Stricherz</h1>
         <div class="badge-container">
-            <img src="img/qr_code.png" alt="QR Code" style="height: 80px; width: 80px; object-fit: contain;">
-            <img src="img/cesium.png" alt="Cesium Certified Developer" style="height: 80px; width: 80px; object-fit: contain;">
+            <img src="img/qr_code.png" alt="QR Code" style="height: 60px; width: 60px; object-fit: contain;">
+            <img src="img/cesium.png" alt="Cesium Certified Developer"
+                 style="height: 60px; width: 60px; object-fit: contain;">
         </div>
         <p class="contact-info">
             <i class="fas fa-envelope icon"></i><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a> |
@@ -198,98 +324,85 @@
                 href="https://www.linkedin.com/in/brad-stricherz-944999349/">LinkedIn</a> |
             <i class="fab fa-github icon"></i><a href="https://github.com/GeoBradDev">GitHub</a>
         </p>
+        <p style="margin-top: 5px; font-size: 0.95em; color: #555;">
+            <i class="fas fa-map-marker-alt icon"></i>St. Louis, MO | TS/SCI Clearance
+        </p>
         <button id="theme-toggle" class="theme-toggle">🌙 Dark Mode</button>
     </header>
 
     <section class="section">
         <h2><i class="fas fa-user icon"></i>Professional Summary</h2>
-        <p>Accomplished full-stack software developer with 15+ years of experience in the GEOINT and Geospatial domain
-            delivering mission-critical geospatial solutions for U.S. Government operations. Progressed from geospatial and imagery analyst to full-stack
-            software developer, combining technical expertise in modern development frameworks with
-            specialized WebGIS and GEOINT capabilities. Founded GeoBrad.dev to apply
-            skills toward social impact initiatives, building open-source mapping platforms for
-            nonprofits and research organizations.</p>
+        <p>Geospatial Software Engineer with 15+ years building production WebGIS platforms and spatial data
+            systems. Currently leading full-stack development at Carbon Solutions, architecting React/OpenLayers
+            frontends and Django Ninja/PostGIS backends for carbon sequestration and capture data
+            visualization. Former full-stack developer at the National Geospatial-Intelligence Agency, delivering
+            mission-critical systems for U.S. Government operations worldwide. Founded GeoBrad.dev to provide pro bono
+            geospatial solutions for nonprofits and researchers addressing environmental and social challenges.</p>
     </section>
     <section class="section">
         <h2><i class="fas fa-code icon"></i>Technical Skills</h2>
         <ul class="skills-list">
-            <li>JavaScript</li>
-            <li>React</li>
-            <li>React Native</li>
-            <li>Node.js</li>
-            <li>Python</li>
-            <li>Django</li>
-            <li>GeoDjango</li>
-            <li>Django Ninja</li>
-            <li>FastAPI</li>
-            <li>PostgreSQL</li>
-            <li>PostGIS</li>
-            <li>SQL</li>
-            <li>Docker</li>
-            <li>Git</li>
-            <li>CI/CD Pipelines</li>
+            <li><strong>Frontend:</strong> JavaScript, React, React Native, OpenLayers, Leaflet, CesiumJS</li>
+            <li><strong>Backend:</strong> Python, Django, GeoDjango, Django Ninja, FastAPI, Node.js</li>
+            <li><strong>Databases:</strong> PostgreSQL, PostGIS, SQL</li>
+            <li><strong>DevOps:</strong> Docker, Git, GitLab CI/CD, GitHub Actions</li>
+            <li><strong>Geospatial:</strong> WebGIS, GEOINT, Spatial Analysis, Geoprocessing</li>
         </ul>
     </section>
 
     <section class="section">
         <h2><i class="fas fa-briefcase icon"></i>Professional Experience</h2>
 
-        <div class="job-title">Full-Stack Software Developer | Geospatial and Imagery Analyst, National
-            Geospatial-Intelligence Agency<span>2010 - Present</span>
+        <div class="job-title">Lead Geospatial Software Engineer, Carbon Solutions<span>Sep 2025 - Present</span>
         </div>
         <ul>
-            <li>Progressed from geospatial and imagery analyst to full-stack developer, delivering mission-critical
-                software and
-                analysis for U.S. Government operations worldwide.
+            <li>Lead architecture and delivery of production WebGIS platforms for carbon capture, storage, and emissions intelligence across the United States.
             </li>
-            <li>Developed secure, modern web applications to support the Aeronautical Safety and Navigation Office using
-                React, FastAPI, and PostGIS.
+            <li>Design full-stack geospatial systems using React/OpenLayers, Django Ninja, and PostGIS for high-performance spatial querying and interactive visualization of environmental datasets.
             </li>
-            <li>Built interactive mapping tools and microservices for aeronautical safety data visualization and
-                automation
-                workflows.
+            <li>Architect scalable spatial APIs and microservices supporting real-time geoprocessing, vector tile delivery, and spatial analytics workflows.
             </li>
-            <li>Deployed scalable geospatial platforms with GitLab CI/CD, Docker, and PostgreSQL/PostGIS backends.</li>
-            <li>Supported time-dominant intelligence operations and targeting missions for FBI and DIA.</li>
-            <li>Deployed to embassies and military commands in Iraq, Saudi Arabia, Korea, and aboard the U.S. Navy’s 7th
-                Fleet as a trusted GEOINT and technical resource.
+            <li>Own cloud infrastructure and CI/CD pipelines, ensuring reliable deployment and performance optimization of geospatial services.
+            </li>
+            <li>Collaborate with climate scientists, data engineers, and executive stakeholders to translate decarbonization requirements into technical solutions.
             </li>
         </ul>
 
-        <div class="job-title">Full-Stack Geospatial Software Developer, GeoBrad.dev<span>2024 - Present</span></div>
+        <div class="job-title">Full-Stack Software Developer | Geospatial and Imagery Analyst, National
+            Geospatial-Intelligence Agency<span>2010 - Sep 2025</span>
+        </div>
         <ul>
-            <li>Founded a consultancy to design open-source, full-stack geospatial platforms using Django, React,
-                Leaflet, and CesiumJS.
+            <li>Progressed from geospatial analyst to full-stack developer over 15-year career, delivering mission-critical systems supporting worldwide U.S. Government operations.
             </li>
-            <li>Built pro bono GIS applications for nonprofits, researchers, and community organizers to address social
-                and environmental challenges.
+            <li>Developed secure web applications for Aeronautical Safety and Navigation Office using React, FastAPI, and PostGIS spatial databases.
             </li>
-            <li>Developed reusable WebGIS templates with user auth, spatial API endpoints, dashboards, and multi-format
-                data export tools.
+            <li>Built interactive mapping tools and microservices for aeronautical safety visualization and workflow automation.
             </li>
-            <li>Provided training and implementation support for organizations adopting modern mapping and spatial
-                analysis technologies.
+            <li>Deployed scalable platforms with GitLab CI/CD, Docker, and PostgreSQL/PostGIS backends.
+            </li>
+            <li>Supported time-sensitive intelligence operations and targeting missions for FBI and DIA.
+            </li>
+            <li>Deployed to embassies and military commands in Iraq, Saudi Arabia, South Korea, and aboard U.S. Navy's 7th Fleet as GEOINT analyst.
             </li>
         </ul>
-    </section>
-
 
     <section class="section">
         <h2><i class="fas fa-graduation-cap icon"></i>Education</h2>
-        <p>Bachelor of Science in Geography, South Dakota State University, 2009</p>
-        <p>Master of Arts in International Relations, Webster University, 2019</p>
-        <p>Master of Science in Spatial Data Science, Penn State University, 2023</p>
+        <ul>
+            <li><strong>Master of Science in Spatial Data Science</strong>, Penn State University, 2023</li>
+            <li><strong>Master of Arts in International Relations</strong>, Webster University, 2019</li>
+            <li><strong>Bachelor of Science in Geography</strong>, South Dakota State University, 2009</li>
+        </ul>
     </section>
 
     <section class="section">
         <h2><i class="fas fa-certificate icon"></i>Certifications</h2>
-        <ul>
-            <li>Penn State Graduate Certificate in Geospatial Programming and Web Map Development</li>
-            <li>GEOINT Professional Certifications in Imagery Analysis, Geospatial Analysis, and Geospatial Data
-                Management</li>
-            <li>Department of Defense Certified Instructor in Python</li>
-            <li> Cesium Certified Developer</li>
-            <li>Docker Foundations Professional Certificate</li>
+        <ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
+            <li>Cesium Certified Developer</li>
+            <li>DoD Certified Python Instructor</li>
+            <li>Penn State: Geospatial Programming & Web Map Development</li>
+            <li>GEOINT Professional Certifications</li>
+            <li>Docker Foundations Professional</li>
         </ul>
     </section>
 
