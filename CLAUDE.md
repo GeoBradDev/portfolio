@@ -98,9 +98,9 @@ Function names, not line numbers, because line numbers go stale.
 - Hover effects and transitions throughout
 
 ### Responsive Hero Background
-`.home-1` in `css/style.css:343-381` serves the hero through three viewport-width
-breakpoints, not device pixel ratio. Keying on DPR would hand a 3x phone the 2560
-file, which is the opposite of what is wanted.
+`.home-1` in `css/style.css` serves the hero through three viewport-width breakpoints,
+not device pixel ratio. Keying on DPR would hand a 3x phone the 2560 file, which is
+the opposite of what is wanted.
 
 | Viewport | File | Size |
 |---|---|---|
@@ -108,18 +108,42 @@ file, which is the opposite of what is wanted.
 | 1281px to 1920px | `img/hero-1920.webp` | 398.1 KB |
 | 1921px and up | `img/hero-2560.webp` | 683.6 KB |
 
-`img/hero-1280.jpg` is the universal fallback in the base rule, for browsers with
-neither WebP nor `image-set()`. Each breakpoint also carries a `-webkit-image-set()`
-line for Safari 14 to 16, which support WebP but not the `type()` notation.
+The base `.home-1` rule declares only `url('/img/hero-1280.jpg')`. All three WebP
+variants live inside one
 
-Do not replace those breakpoint rules with a plain `url('...webp')` declaration. A
-browser lacking both WebP and `image-set()` would then receive an undecodable file
-instead of falling back to the JPEG.
+```css
+@supports (background-image: image-set(url('/img/hero-1280.webp') type('image/webp')))
+```
+
+block, with the two breakpoint `@media` rules nested inside it. A single test gates
+both the syntax and the format, because every engine that parses `image-set()` with
+`type()` also decodes WebP. Anything older never enters the block and keeps the JPEG.
+
+Two rules for editing this:
+
+- **Never declare a WebP URL outside the `@supports` block**, and do not reach for
+  `-webkit-image-set()`. The prefixed form cannot express a format fallback, so
+  Safari 6 to 13, which support the prefixed function but not WebP, resolve it to a
+  file they cannot decode and paint no hero at all, only the 40 percent scrim from
+  `.home-1:after`. Safari 14 to 16 also land on the JPEG under this structure. That
+  is the accepted cost of never handing any browser an undecodable file.
+- The JPEG stays a plain `url()` in the base rule, so it is the universal floor.
 
 `index.html` preloads the matching variant per breakpoint, because a CSS background
 image is not discovered until the stylesheet parses, and this one is the LCP element.
-The preload `href` values are root-absolute to match the URLs in `css/style.css`; a
-preload only counts if its resolved URL matches the request the CSS makes.
+Two details matter:
+
+- The preload `href` values are root-absolute to match the URLs in `css/style.css`.
+  A preload only counts if its resolved URL matches the request the CSS makes.
+- The three `media` ranges overlap by one pixel on purpose. Viewport width is
+  fractional under browser zoom and fractional OS scaling, so abutting ranges leave
+  gaps a real width can land in, and a gap means no preload fires at all. The overlap
+  costs one redundant fetch at exactly 1281px and 1921px.
+
+A browser that fails the `@supports` test still honors the preload, because
+`type="image/webp"` gates only on decode support, so it fetches a WebP it will not
+paint. That waste is accepted; the alternative is dropping the preload and losing the
+LCP win for everyone.
 
 ## Development Workflow
 
@@ -144,9 +168,10 @@ python3 tools/verify_assets.py
 ```
 
 Exits 0 when the issue #15 acceptance criteria still hold: no dead library ships, no
-oversized original returns, every `<img>` carries explicit `width`/`height`, the hero
-stays under 300 KB, and the homepage stays under 1 MB. Standard library only. Run it
-after touching any asset, markup `<img>` tag, or `<script>`/`<link>` tag.
+oversized original returns, every optimized variant the site references is present,
+every `<img>` carries explicit `width`/`height`, the hero stays under 300 KB, and the
+homepage stays under 1 MB. Standard library only. Run it after touching any asset,
+markup `<img>` tag, or `<script>`/`<link>` tag.
 
 ### Regenerating optimized images
 
@@ -175,7 +200,7 @@ Requires Pillow. Never commit a full-resolution camera original.
 ### GitHub API Rate Limiting
 The portfolio section fetches from GitHub API. Be aware:
 - Unauthenticated requests have 60 requests/hour limit
-- Error handling is implemented (the `catch` at index.html:567)
+- Error handling is implemented (the `catch` at index.html:575)
 - Consider this when testing portfolio loading features
 
 ## Common Tasks
@@ -197,9 +222,9 @@ The form submits to FormSubmit (line 393 in index.html). To change:
 Every raster image ships at roughly 2x its largest CSS display size, as WebP with a
 fallback, and every `<img>` carries explicit `width`/`height` to prevent layout shift.
 
-- Hero background: `img/hero-{1280,1920,2560}.webp` plus `img/hero-1280.jpg`, wired in `css/style.css:343-381`
-- Profile avatar: `img/portrait-340.{webp,jpg}` in a `<picture>` at `index.html:90`
-- Badges: `img/cesium-120.{webp,png}` and `img/qr_code-240.png` at `resume.html:318`
+- Hero background: `img/hero-{1280,1920,2560}.webp` plus `img/hero-1280.jpg`, wired in the `.home-1` rule and the `@supports` block after it in `css/style.css`
+- Profile avatar: `img/portrait-340.{webp,jpg}` in the `<picture>` inside `.avatar-hero` in `index.html`
+- Badges: `img/cesium-120.{webp,png}` and `img/qr_code-240.png` in `.badge-container` in `resume.html`
 - Social icons: `img/Bluesky.svg`
 
 The QR is 240x239, not square, because its source is 1680x1670. Preserve that aspect

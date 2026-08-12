@@ -344,13 +344,45 @@ Home
     position: relative;
     height: 100%;
     min-height: 550px;
-    background-image: url('/img/DSC01590.jpg');
+    /* Universal fallback. Every browser can decode this one, and nothing below
+       can override it with something undecodable: a browser that cannot parse
+       the image-set() block never enters it. */
+    background-image: url('/img/hero-1280.jpg');
     background-repeat: no-repeat;
     background-position: center;
     -webkit-background-size: cover;
     -moz-background-size: cover;
     -ms-background-size: cover;
     background-size: cover;
+}
+
+/* One test gates both the syntax and the format, because every engine that parses
+   image-set() with type() also decodes WebP. Anything older keeps the JPEG above.
+
+   The prefixed -webkit-image-set() form is deliberately not used. It cannot express
+   a format fallback, so Safari 6 to 13, which support the prefixed function but not
+   WebP, would resolve it to a file they cannot decode and paint no hero at all,
+   only the 40 percent scrim from .home-1:after. Serving those browsers a slightly
+   soft 1280 JPEG is the better failure.
+
+   Variants are keyed to viewport width, not device pixel ratio. A 3x phone is still
+   a small viewport and must not be handed the 2560 file. */
+@supports (background-image: image-set(url('/img/hero-1280.webp') type('image/webp'))) {
+    .home-1 {
+        background-image: image-set(url('/img/hero-1280.webp') type('image/webp'));
+    }
+
+    @media screen and (min-width: 1281px) {
+        .home-1 {
+            background-image: image-set(url('/img/hero-1920.webp') type('image/webp'));
+        }
+    }
+
+    @media screen and (min-width: 1921px) {
+        .home-1 {
+            background-image: image-set(url('/img/hero-2560.webp') type('image/webp'));
+        }
+    }
 }
 
 .home-1:after {

@@ -120,3 +120,7 @@ fabric.properties
 
 # Claude Code worktrees are local scratch checkouts, never committed.
 .claude/worktrees/
+
+# Python bytecode from tools/
+__pycache__/
+*.py[cod]

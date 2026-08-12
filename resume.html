@@ -204,7 +204,13 @@
             right: 5px;
         }
 
+        /* display:block matters here. The Cesium badge sits inside a picture
+           element, and although a picture flex item is itself blockified, it still
+           lays its image out inline, adding baseline descender space that measured
+           64px against the bare QR image's 60px. Blocking the image removes it.
+           Setting display on the picture element instead has no effect; measured. */
         .badge-container img {
+            display: block;
             height: 60px !important;
             width: 60px !important;
         }
@@ -313,9 +319,13 @@
     <header style="position: relative;">
         <h1>Brad Stricherz</h1>
         <div class="badge-container">
-            <img src="img/qr_code.png" alt="QR Code" style="height: 60px; width: 60px; object-fit: contain;">
-            <img src="img/cesium.png" alt="Cesium Certified Developer"
+            <img src="img/qr_code-240.png" alt="QR Code" width="240" height="239"
                  style="height: 60px; width: 60px; object-fit: contain;">
+            <picture>
+                <source srcset="img/cesium-120.webp" type="image/webp">
+                <img src="img/cesium-120.png" alt="Cesium Certified Developer" width="120" height="120"
+                     style="height: 60px; width: 60px; object-fit: contain;">
+            </picture>
         </div>
         <p class="contact-info">
             <i class="fas fa-envelope icon"></i><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a> |
