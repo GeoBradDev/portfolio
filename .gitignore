@@ -117,7 +117,6 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/webstorm
 
 *.zip
-/C*.md
 
 # Claude Code worktrees are local scratch checkouts, never committed.
 .claude/worktrees/
