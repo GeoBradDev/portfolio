@@ -527,18 +527,6 @@ Home
     z-index: 3;
 }
 
-.home-carousel .first-slide {
-    background-image: url(http://placehold.it/1200x800);
-}
-
-.home-carousel .second-slide {
-    background-image: url(http://placehold.it/1200x800);
-}
-
-.home-carousel .third-slide {
-    background-image: url(http://placehold.it/1200x800);
-}
-
 .slider-btn {
     display: inline-block;
     margin-top: 20px;
