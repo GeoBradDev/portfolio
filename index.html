@@ -84,7 +84,7 @@
 <!-- END MAIN NAVIGATION BAR -->
 
 <!-- HOME -->
-<section id="home" class="home-1 parallax one-page-section">
+<section id="home" class="home-1 one-page-section">
     <div class="page-table">
         <div class="table-cell text-center">
             <div class="avatar-hero">
@@ -187,7 +187,7 @@
                         <span class="main-color progress-bar-level">Expert</span>
                     </div>
                     <div class="progress-bar-skills">
-                        <div class="progress-bar-line main-color-bg" style="width: 90%;"></div>
+                        <div class="progress-bar-line main-color-bg" data-percent="90"></div>
                     </div>
                 </div>
 
@@ -197,7 +197,7 @@
                         <span class="main-color progress-bar-level">Advanced</span>
                     </div>
                     <div class="progress-bar-skills">
-                        <div class="progress-bar-line main-color-bg" style="width: 75%;"></div>
+                        <div class="progress-bar-line main-color-bg" data-percent="75"></div>
                     </div>
                 </div>
 
@@ -207,7 +207,7 @@
                         <span class="main-color progress-bar-level">Advanced</span>
                     </div>
                     <div class="progress-bar-skills">
-                        <div class="progress-bar-line main-color-bg" style="width: 75%;"></div>
+                        <div class="progress-bar-line main-color-bg" data-percent="75"></div>
                     </div>
                 </div>
 
@@ -322,7 +322,7 @@
 <!-- END SERVICES -->
 
 <!-- portfolio -->
-<section id="portfolio" class="section">
+<section id="portfolio" class="section one-page-section">
     <div class="container">
         <div class="section-title">
             <h2>Portfolio</h2>
@@ -465,6 +465,8 @@
 <script src="js/imagesloaded.pkgd.min.js"></script>
 <!-- jQuery Filterizr JS -->
 <script src="js/isotope.pkgd.min.js"></script>
+<!-- Site behavior -->
+<script src="js/main.js"></script>
 <!-- Custom js -->
 <script>
     // Keep the footer year current so it never goes stale. Runs before the
@@ -557,15 +559,15 @@
                 portfolioContainer.appendChild(card);
             });
 
-            // Add click handlers for the cards
+            // Make the whole card clickable, but let the real anchors inside
+            // it handle their own clicks. Without the guard, clicking "Live
+            // Demo" or "Code" opens the link and then bubbles up here, which
+            // opens a second tab.
             document.querySelectorAll('.portfolio-card').forEach((card, index) => {
                 const repo = portfolioRepos[index];
-                card.addEventListener('click', () => {
-                    if (repo.homepage) {
-                        window.open(repo.homepage, '_blank');
-                    } else {
-                        window.open(repo.html_url, '_blank');
-                    }
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('a')) return;
+                    window.open(repo.homepage || repo.html_url, '_blank', 'noopener');
                 });
             });
 
@@ -746,7 +748,13 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.7);    opacity: 0;
+    background: rgba(0, 0, 0, 0.7);
+    opacity: 0;
+    /* The overlay covers the whole card at z-index 3, above the content at
+       z-index 2. An opacity: 0 element is still hit-testable, so without this
+       it swallows every click and the Live Demo and Code anchors underneath
+       can never be reached. */
+    pointer-events: none;
     transition: all 0.4s ease;
     z-index: 3;
     display: flex;

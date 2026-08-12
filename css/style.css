@@ -1209,6 +1209,17 @@ Footer
     bottom: 25px;
     right: 30px;
     opacity: 0;
+    /* Without these the button is invisible but still clickable and still in
+       the tab order, parked over the bottom-right corner of every page. */
+    visibility: hidden;
+    pointer-events: none;
+    /* Must stay "all": this rule is later than .effect's "transition: all .4s"
+       at equal specificity, so narrowing it here would silently kill the
+       hover background and color fade this button inherits from .effect. */
+    -webkit-transition: all .3s ease;
+    -o-transition: all .3s ease;
+    -moz-transition: all .3s ease;
+    transition: all .3s ease;
     z-index: 60;
 }
 
@@ -1223,6 +1234,8 @@ Footer
 
 .show-up-btn {
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 #credit {
