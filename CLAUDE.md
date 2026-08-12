@@ -33,8 +33,10 @@ CVE-2020-11022, CVE-2020-11023, and CVE-2019-11358 open (issue #17). It is now 3
 the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3 support; do
 not downgrade one without the other.
 
-Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, on every
-page. `resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
+Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, linked from
+`index.html` and `resume.html`. `privacy.html` has no `<link>` tags and no `fa-` icons, so it
+neither links the stylesheet nor needs it; do not add an icon there without adding the link.
+`resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
 majors, two syntaxes, and a third party on the critical path. Use bare `fa fa-*` classes; the
 FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rejects them.
 
@@ -210,9 +212,11 @@ shim survives, and Font Awesome is one local major site-wide. Standard library o
 after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled library.
 
 It also runs `node --check` over every inline `<script>` in `index.html` and `resume.html`, the
-way `verify_interactivity.py` does for `js/main.js`. The portfolio renderer is about 90 lines of
-inline JavaScript, and before this it had no syntax gate at all. `node` is a convenience, skipped
-when absent, never a project dependency.
+way `verify_interactivity.py` does for `js/main.js`. The gated inline `<script>` in `index.html`
+runs 466 lines total; about 301 of those are an embedded CSS-as-a-string block injected via
+`insertAdjacentHTML`, leaving roughly 165 lines of actual portfolio-renderer JavaScript, and
+before this it had no syntax gate at all. `node` is a convenience, skipped when absent, never a
+project dependency.
 
 ### Regenerating optimized images
 
