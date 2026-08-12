@@ -13,12 +13,6 @@
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
 
-    <!-- Magnific Popup core CSS file -->
-    <link rel="stylesheet" href="css/magnific-popup.css">
-
-    <!-- Owl Carousel CSS -->
-    <link rel="stylesheet" href="css/owl.carousel.min.css">
-
     <!-- FONT AWESOME -->
     <link rel="stylesheet" type="text/css" href="css/font-awesome.min.css">
 
@@ -30,6 +24,21 @@
 
     <!-- Favicon -->
     <link rel="icon" href="img/favicon.ico">
+
+    <!-- Hero background is the LCP element and lives in CSS, so it is not discovered
+         until the stylesheet parses. Preload the variant this viewport will actually
+         request; the media queries mirror the breakpoints in css/style.css, and the
+         hrefs are root-absolute to match the URLs the CSS asks for. A preload only
+         counts if its resolved URL matches the request the CSS makes.
+
+         The ranges overlap by a pixel on purpose. Viewport width is fractional under
+         browser zoom and fractional OS scaling, so abutting ranges leave gaps a real
+         width can land in, and a gap means no preload fires at all, which defeats the
+         point. An overlap costs one redundant fetch at exactly 1281px and 1921px; a
+         gap costs the LCP win at any fractional width near a breakpoint. -->
+    <link rel="preload" as="image" href="/img/hero-1280.webp" type="image/webp" media="(max-width: 1281px)">
+    <link rel="preload" as="image" href="/img/hero-1920.webp" type="image/webp" media="(min-width: 1281px) and (max-width: 1921px)">
+    <link rel="preload" as="image" href="/img/hero-2560.webp" type="image/webp" media="(min-width: 1921px)">
 
     <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
     <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
@@ -88,7 +97,10 @@
     <div class="page-table">
         <div class="table-cell text-center">
             <div class="avatar-hero">
-                <img src="img/PORTRAIT_Cropped.jpg">
+                <picture>
+                    <source srcset="img/portrait-340.webp" type="image/webp">
+                    <img src="img/portrait-340.jpg" alt="Brad Stricherz" width="340" height="340">
+                </picture>
             </div>
             <h1>I'm Brad Stricherz</h1>
             <h2 class="typer-title">A Geospatial Software Engineer</h2>
@@ -159,7 +171,7 @@
                                 class="fa fa-facebook"></i></a></li>
                         <li>
                             <a href="https://bsky.app/profile/geobrad.bsky.social" class="effect" target="_blank">
-                                <img src="./img/Bluesky.svg" alt="Bluesky">
+                                <img src="./img/Bluesky.svg" alt="Bluesky" width="16" height="16">
                             </a>
                         </li>
                         <li><a href="https://www.youtube.com/stricherz13" class="effect" target="_blank"><i
@@ -421,7 +433,7 @@
                     </li>
                     <li>
                         <a class="effect" href="https://bsky.app/profile/geobrad.bsky.social" target="_blank">
-                            <img src="./img/Bluesky.svg" alt="Bluesky">
+                            <img src="./img/Bluesky.svg" alt="Bluesky" width="16" height="16">
                         </a>
                     </li>
 
@@ -454,16 +466,6 @@
 <script src="js/jquery.min.js"></script>
 <!-- Bootstrap JS -->
 <script src="js/bootstrap.min.js"></script>
-<!-- Magnific Popup core JS file -->
-<script src="js/jquery.magnific-popup.min.js"></script>
-<!-- Owl Carousel JS -->
-<script src="js/owl.carousel.min.js"></script>
-<!-- jQuery Typer JS -->
-<script src="js/jquery.typer.js"></script>
-<!-- jQuery Images Loaded JS -->
-<script src="js/imagesloaded.pkgd.min.js"></script>
-<!-- jQuery Filterizr JS -->
-<script src="js/isotope.pkgd.min.js"></script>
 <!-- Site behavior -->
 <script src="js/main.js"></script>
 <!-- Custom js -->
