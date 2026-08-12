@@ -18,14 +18,25 @@ Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial softwar
 - **Frontend**: Vanilla HTML5, CSS3, JavaScript (jQuery-based)
 - **CSS Framework**: Bootstrap 3.x
 - **Key Libraries**:
-  - jQuery 3.x (js/jquery.min.js)
-  - Bootstrap JS (js/bootstrap.min.js)
+  - jQuery 3.7.1 (js/jquery.min.js)
+  - Bootstrap JS 3.3.7 (js/bootstrap.min.js)
 - **Deployment**: GitHub Pages with custom domain (CNAME)
 
 Owl Carousel, Magnific Popup, Isotope, imagesLoaded, jQuery Typer, and Particles.js
 were removed in issue #15. None of them had a matching element on any page, so all
 of them downloaded and did nothing. Do not reintroduce a library without an element
 that actually uses it.
+
+The file shipped jQuery 2.2.4 for two years while this document claimed 3.x, which left
+CVE-2020-11022, CVE-2020-11023, and CVE-2019-11358 open (issue #17). It is now 3.7.1, and
+`tools/verify_security.py` asserts the version in the file against the version named here, so
+the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3 support; do
+not downgrade one without the other.
+
+Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, on every
+page. `resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
+majors, two syntaxes, and a third party on the critical path. Use bare `fa fa-*` classes; the
+FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rejects them.
 
 ## Site Structure
 
@@ -74,10 +85,15 @@ still hit-testable, so without it the overlay swallows every click and the "Live
 Demo" and "Code" anchors become unreachable.
 
 ### Dynamic Portfolio Loading
-The portfolio section in index.html (script at lines 469-882, embedded styles at 579-871) dynamically fetches and displays GitHub repositories:
+The portfolio section in index.html (inline `<script>` before `</body>`, embedded styles further
+down the same block) dynamically fetches and displays GitHub repositories:
 - Fetches repos from multiple GitHub users: GeoBradDev, MapTheVoteSTL, Seaside-Sustainability-Web-GIS
 - Filters repositories containing "portfolio" in description
-- Displays cards with repo name, language, stars, description, and links
+- Cards are built with `document.createElement` and `textContent`, never a template literal, so
+  a hostile repo `name` or `description` can only ever render as text
+- `safeUrl()` gates the "Live Demo" and "Code" links: it accepts only an `https:` URL and returns
+  `null` otherwise, and a `null` result means that link, or the whole-card click handler, does
+  not render at all
 - Embedded CSS in index.html for portfolio styling
 
 ### Navigation & Scrolling
@@ -180,6 +196,24 @@ every `<img>` carries explicit `width`/`height`, the hero stays under 300 KB, an
 homepage stays under 1 MB. Standard library only. Run it after touching any asset,
 markup `<img>` tag, or `<script>`/`<link>` tag.
 
+### Verifying the security criteria
+
+```bash
+python3 tools/verify_security.py
+```
+
+Exits 0 when the issue #17 acceptance criteria still hold: jQuery is at or above 3.5, the
+version in the file matches the one named in this document, no GitHub API field is interpolated
+into a template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an
+`href` or `window.open`, no page or stylesheet requests an `http://` asset, no IE conditional
+shim survives, and Font Awesome is one local major site-wide. Standard library only. Run it
+after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled library.
+
+It also runs `node --check` over every inline `<script>` in `index.html` and `resume.html`, the
+way `verify_interactivity.py` does for `js/main.js`. The portfolio renderer is about 90 lines of
+inline JavaScript, and before this it had no syntax gate at all. `node` is a convenience, skipped
+when absent, never a project dependency.
+
 ### Regenerating optimized images
 
 ```bash
@@ -200,14 +234,14 @@ Requires Pillow. Never commit a full-resolution camera original.
 
 **JavaScript Changes**:
 - Main logic: `js/main.js`
-- Some inline JavaScript in `index.html` (portfolio loading logic at lines 469-882)
+- Some inline JavaScript in `index.html` (portfolio loading logic in the `<script>` block before `</body>`)
 
 **Important**: When modifying the portfolio loading logic in index.html, the JavaScript and CSS are both inline. The portfolio cards system includes both functionality and styles in the same section.
 
 ### GitHub API Rate Limiting
 The portfolio section fetches from GitHub API. Be aware:
 - Unauthenticated requests have 60 requests/hour limit
-- Error handling is implemented (the `catch` at index.html:575)
+- Error handling is implemented (the `catch` in `loadPortfolio()` in index.html)
 - Consider this when testing portfolio loading features
 
 ## Common Tasks
@@ -221,9 +255,9 @@ Portfolio items are automatically pulled from GitHub repos with "portfolio" in t
 Edit `resume.html` - it's a standalone HTML file with inline styles and JavaScript.
 
 ### Modifying Contact Form
-The form submits to FormSubmit (line 393 in index.html). To change:
+The form submits to FormSubmit (the `<form id="contact-form">` action in index.html). To change:
 - Update the action URL with new FormSubmit endpoint
-- Honeypot field is present for spam protection (line 410)
+- Honeypot field is present for spam protection (the hidden `_honey` input)
 
 ### Adding/Changing Images
 Every raster image ships at roughly 2x its largest CSS display size, as WebP with a
