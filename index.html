@@ -482,6 +482,32 @@
     ];
     const portfolioContainer = document.getElementById("github-projects");
 
+    // Repo fields come from the GitHub API, so nothing below may reach the DOM
+    // as markup. Every text node is set with textContent, and every navigable
+    // URL goes through safeUrl first.
+    //
+    // A repo's homepage is whatever its owner typed into a text box. Left
+    // unchecked it lands in an href and in window.open, and both of those run
+    // a javascript: URL in this page's origin. Allow https and nothing else:
+    // http would be mixed content on this site anyway.
+    function safeUrl(value) {
+        if (typeof value !== 'string' || value === '') return null;
+        let parsed;
+        try {
+            parsed = new URL(value);
+        } catch (err) {
+            return null;
+        }
+        return parsed.protocol === 'https:' ? parsed.href : null;
+    }
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
     async function loadPortfolio() {
         try {
             let allRepos = [];
@@ -512,64 +538,80 @@
 
             portfolioContainer.innerHTML = "";
 
-            portfolioRepos.forEach((repo, index) => {
-                const card = document.createElement("div");
-                card.className = "col-sm-6 col-md-4 portfolio-item";
+            portfolioRepos.forEach((repo) => {
+                const demoUrl = safeUrl(repo.homepage);
+                const codeUrl = safeUrl(repo.html_url);
 
-                // Create a more sophisticated card design
-                card.innerHTML = `
-                <div class="portfolio-card">
-                    <div class="portfolio-card-inner">
-                        <div class="portfolio-content">
-                            <div class="portfolio-header">
-                                <h3 class="portfolio-title">${repo.name}</h3>
-                                <div class="portfolio-meta">
-                                    <span class="portfolio-language">${repo.language || 'Code'}</span>
-                                    <span class="portfolio-stars">★ ${repo.stargazers_count}</span>
-                                </div>
-                            </div>
+                const item = el("div", "col-sm-6 col-md-4 portfolio-item");
+                const cardEl = el("div", "portfolio-card");
+                const inner = el("div", "portfolio-card-inner");
+                const content = el("div", "portfolio-content");
 
-                            <div class="portfolio-description">
-                                <p>${repo.description || "No description available"}</p>
-                            </div>
+                const header = el("div", "portfolio-header");
+                header.appendChild(el("h3", "portfolio-title", repo.name));
+                const meta = el("div", "portfolio-meta");
+                meta.appendChild(el("span", "portfolio-language", repo.language || "Code"));
+                meta.appendChild(el("span", "portfolio-stars", "★ " + repo.stargazers_count));
+                header.appendChild(meta);
+                content.appendChild(header);
 
-                            <div class="portfolio-footer">
-                                <div class="portfolio-links">
-                                    ${repo.homepage ?
-                    `<a href="${repo.homepage}" target="_blank" class="portfolio-link portfolio-link-demo">
-                                            <i class="fa fa-external-link"></i> Live Demo
-                                        </a>` : ''
+                const description = el("div", "portfolio-description");
+                description.appendChild(el("p", null, repo.description || "No description available"));
+                content.appendChild(description);
+
+                const footer = el("div", "portfolio-footer");
+                const links = el("div", "portfolio-links");
+
+                if (demoUrl) {
+                    const demo = el("a", "portfolio-link portfolio-link-demo");
+                    demo.href = demoUrl;
+                    demo.target = "_blank";
+                    demo.rel = "noopener noreferrer";
+                    demo.appendChild(el("i", "fa fa-external-link"));
+                    demo.appendChild(document.createTextNode(" Live Demo"));
+                    links.appendChild(demo);
                 }
-                                    <a href="${repo.html_url}" target="_blank" class="portfolio-link portfolio-link-code">
-                                        <i class="fa fa-github"></i> Code
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
 
-                        <div class="portfolio-overlay">
-                            <div class="portfolio-overlay-content">
-                                <h4>${repo.name}</h4>
-                                <p>${repo.homepage ? 'Open live demo' : 'View on GitHub'}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+                if (codeUrl) {
+                    const code = el("a", "portfolio-link portfolio-link-code");
+                    code.href = codeUrl;
+                    code.target = "_blank";
+                    code.rel = "noopener noreferrer";
+                    code.appendChild(el("i", "fa fa-github"));
+                    code.appendChild(document.createTextNode(" Code"));
+                    links.appendChild(code);
+                }
 
-                portfolioContainer.appendChild(card);
-            });
+                footer.appendChild(links);
+                content.appendChild(footer);
+                inner.appendChild(content);
 
-            // Make the whole card clickable, but let the real anchors inside
-            // it handle their own clicks. Without the guard, clicking "Live
-            // Demo" or "Code" opens the link and then bubbles up here, which
-            // opens a second tab.
-            document.querySelectorAll('.portfolio-card').forEach((card, index) => {
-                const repo = portfolioRepos[index];
-                card.addEventListener('click', (event) => {
-                    if (event.target.closest('a')) return;
-                    window.open(repo.homepage || repo.html_url, '_blank', 'noopener');
-                });
+                const overlay = el("div", "portfolio-overlay");
+                const overlayContent = el("div", "portfolio-overlay-content");
+                overlayContent.appendChild(el("h4", null, repo.name));
+                overlayContent.appendChild(el("p", null, demoUrl ? "Open live demo" : "View on GitHub"));
+                overlay.appendChild(overlayContent);
+                inner.appendChild(overlay);
+
+                cardEl.appendChild(inner);
+                item.appendChild(cardEl);
+
+                // The whole card is clickable, but the real anchors inside it
+                // handle their own clicks. Without the guard, clicking "Live
+                // Demo" or "Code" opens the link and then bubbles up here,
+                // which opens a second tab.
+                //
+                // Bound per card against the URL already validated above, so a
+                // hostile homepage cannot reach window.open either.
+                const target = demoUrl || codeUrl;
+                if (target) {
+                    cardEl.addEventListener("click", (event) => {
+                        if (event.target.closest("a")) return;
+                        window.open(target, "_blank", "noopener");
+                    });
+                }
+
+                portfolioContainer.appendChild(item);
             });
 
         } catch
