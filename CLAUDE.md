@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git exception for /work-issue
+
+When executing the /work-issue workflow, Claude may run `git commit` and `git push`
+on `issue-*` feature branches only. Never commit or push to the default branch, and
+never commit or push outside a /work-issue run. The global no-commit policy applies
+in all other circumstances.
+
 ## Project Overview
 
 Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial software developer's personal site. Deployed to GitHub Pages at www.geobrad.dev.
