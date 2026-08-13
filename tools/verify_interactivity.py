@@ -118,7 +118,7 @@ def check_progress_bars(facts):
             )
 
 
-def check_card_handler(html):
+def check_card_handler(html, css):
     """Clicking Live Demo or Code must not also fire the card handler."""
     if "portfolio-card" not in html:
         return
@@ -133,9 +133,14 @@ def check_card_handler(html):
     # opacity: 0 element is still hit-testable, so without pointer-events: none
     # every click lands on the overlay. That makes the Live Demo and Code links
     # dead and the anchor guard permanently false.
-    rule = re.search(r"\.portfolio-overlay\s*\{(.*?)\}", html, re.S)
+    #
+    # Read out of css/style.css, not index.html: issue 20 moved the whole
+    # portfolio block out of a JavaScript string in the page and into the
+    # stylesheet. The handler this pairs with is still inline in index.html,
+    # which is why this one check needs both files.
+    rule = re.search(r"\.portfolio-overlay\s*\{(.*?)\}", css, re.S)
     if rule is None:
-        fail("Could not find the .portfolio-overlay rule in index.html.")
+        fail("Could not find the .portfolio-overlay rule in css/style.css.")
     elif not re.search(r"pointer-events\s*:\s*none", rule.group(1)):
         fail(
             ".portfolio-overlay has no 'pointer-events: none', so it swallows "
@@ -218,7 +223,7 @@ def main():
     check_script_tag(facts)
     check_nav_targets(facts)
     check_progress_bars(facts)
-    check_card_handler(html)
+    check_card_handler(html, css)
     check_scroll_up_transition(css)
     check_no_dead_code(facts, js)
     check_syntax()

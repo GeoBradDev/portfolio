@@ -116,14 +116,24 @@ def check_no_unescaped_interpolation():
     if source is None:
         return
 
-    # Every repo field the GitHub API supplies and the card renderer uses.
+    # Every field the card renderer reads off a projects.json entry. The data
+    # still originates on github.com, where a repo name and description are
+    # whatever their owner typed, so it is still remote data by any measure
+    # that matters here.
+    #
+    # Issue 20 renamed the fields, not the loop variable: homepage, html_url,
+    # and stargazers_count became demo, code, and stars when the renderer
+    # stopped calling the API directly. Leaving the old names here would have
+    # left three of these six assertions matching nothing and passing
+    # vacuously. The variable is still `repo`, which is what keeps the three
+    # sink checks in check_repo_urls_are_scheme_validated matching.
     remote_fields = [
         "repo.name",
         "repo.description",
-        "repo.homepage",
-        "repo.html_url",
+        "repo.demo",
+        "repo.code",
         "repo.language",
-        "repo.stargazers_count",
+        "repo.stars",
     ]
 
     # A template placeholder holding a repo field, anywhere in the file.
@@ -167,13 +177,16 @@ def check_no_unescaped_interpolation():
     # and this pattern would need to allow-list the escaping call before
     # that becomes legal.
     #
-    # index.html has two template-literal HTML sinks today. The error-path
-    # innerHTML assignment is a literal string with no interpolation. The
-    # portfolioCSS block reaches insertAdjacentHTML through a variable
-    # reference, not as a literal at the call site, so this pattern never
-    # even sees it; it also contains no ${ of its own (checked by hand: it
-    # is pure CSS, no repo data). Neither trips this check; a repo.name
-    # alias would.
+    # index.html has two template-literal HTML sinks today, both innerHTML
+    # assignments on the portfolio container and both literal strings with no
+    # interpolation: the error path and the empty state. Neither trips this
+    # check; a repo.name alias at either would.
+    #
+    # There used to be a third. The portfolioCSS block reached
+    # insertAdjacentHTML through a variable reference rather than as a literal
+    # at the call site, so this pattern never saw it at all. Issue 20 moved
+    # that CSS into css/style.css, and index.html now calls insertAdjacentHTML
+    # nowhere.
     sink_pattern = re.compile(
         r"\.(?:innerHTML|outerHTML)\s*=\s*`(?P<assign>.*?)`"
         r"|insertAdjacentHTML\([^)]*?,\s*`(?P<call>.*?)`",
