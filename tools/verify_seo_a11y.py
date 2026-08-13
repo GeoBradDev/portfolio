@@ -26,6 +26,7 @@ every other verifier uses.
 import json
 import re
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -486,6 +487,156 @@ def check_homepage_has_person_structured_data():
         check(url in source, "sameAs entry is also linked from the page (%s)" % url)
 
 
+class AccessibleNames(HTMLParser):
+    """Find an <a> or <button> that a screen reader would announce unnamed.
+
+    An accessible name here comes from one of four places, which is what a
+    browser's accname computation actually falls back through for these
+    elements: aria-label on the element, aria-labelledby on it, text inside
+    it, or the alt text of an image inside it. A Font Awesome <i> contributes
+    nothing, because the glyph is a CSS ::before on an empty element.
+
+    Also flags a decorative icon that is NOT hidden from assistive tech.
+    Font Awesome 4 glyphs live in the Private Use Area, and a screen reader
+    that reaches one announces whatever its character database says, which
+    is at best nothing and at worst a wrong word ahead of the real name.
+    """
+
+    NAMED_BY = ("aria-label", "aria-labelledby", "title")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.problems = []
+        self.stack = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("a", "button"):
+            named = any((attrs.get(key) or "").strip() for key in self.NAMED_BY)
+            # An <a> with no href is not a link and not focusable.
+            interactive = tag == "button" or "href" in attrs
+            self.stack.append(
+                {
+                    "tag": tag,
+                    "named": named,
+                    "text": "",
+                    "line": self.getpos()[0],
+                    "interactive": interactive,
+                }
+            )
+            return
+        if tag == "img" and self.stack:
+            if (attrs.get("alt") or "").strip():
+                self.stack[-1]["text"] += attrs["alt"]
+        if tag == "i" and "fa" in (attrs.get("class") or "").split():
+            if (attrs.get("aria-hidden") or "").lower() != "true":
+                self.problems.append(
+                    'line %d: decorative <i class="fa ..."> is not aria-hidden'
+                    % self.getpos()[0]
+                )
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+    def handle_data(self, data):
+        if self.stack:
+            self.stack[-1]["text"] += data
+
+    def handle_endtag(self, tag):
+        if tag not in ("a", "button") or not self.stack:
+            return
+        # Unwind to the matching open tag rather than assuming it is the top,
+        # so one stray close tag does not desynchronize the whole page. Every
+        # frame popped on the way is still judged: dropping them silently
+        # would let an unnamed element escape by sitting under a mismatched
+        # tag, which is exactly the malformed case worth reporting.
+        while self.stack:
+            frame = self.stack.pop()
+            if frame["interactive"] and not frame["named"] and not frame["text"].strip():
+                self.problems.append(
+                    "line %d: <%s> has no accessible name"
+                    % (frame["line"], frame["tag"])
+                )
+            if frame["tag"] == tag:
+                break
+
+
+def check_images_have_alt_text():
+    """An <img> with no alt announces its filename, or its URL.
+
+    An empty alt is allowed and is the correct answer for a decorative
+    image: it tells a screen reader to skip the image rather than guess at
+    it. A missing attribute is not the same thing and is never correct.
+
+    The filename check is the closest a source-level scan gets to "the alt
+    is meaningful". It catches the copy-paste that puts portrait-340.jpg, or
+    portrait-340, in the alt of portrait-340.jpg.
+
+    It deliberately does not fire when the alt matches a filename that is a
+    single plain word, because a logo file named after the brand it depicts
+    is the normal case and the brand is the correct alt text. Bluesky.svg
+    with alt="Bluesky" is right, and an earlier version of this check called
+    it wrong. Only a stem carrying a digit or a separator, which is what a
+    generated or size-suffixed asset name looks like, counts as a filename
+    leaking into the alt.
+    """
+    print("\nEvery image has alt text")
+
+    machine_name = re.compile(r"[\d_-]")
+    for path in HTML_PAGES:
+        source = read(path)
+        if source is None:
+            continue
+
+        tags = re.findall(r"<img\b[^>]*>", source, re.I)
+        if not tags:
+            print("  skip  %s has no <img>" % path.name)
+            continue
+
+        for tag in tags:
+            src = re.search(r'\bsrc\s*=\s*"([^"]*)"', tag, re.I)
+            label = src.group(1) if src else tag[:40]
+            alt = re.search(r'\balt\s*=\s*"([^"]*)"', tag, re.I)
+            if not check(
+                alt is not None, "%s: <img src=%s> has an alt" % (path.name, label)
+            ):
+                continue
+
+            text = alt.group(1).strip().lower()
+            basename = label.rsplit("/", 1)[-1].lower()
+            stem = basename.rsplit(".", 1)[0]
+            leaked = text == label.lower() or text == basename or (
+                text == stem and machine_name.search(stem) is not None
+            )
+            check(
+                not leaked,
+                "%s: <img src=%s> alt is not the filename" % (path.name, label),
+            )
+
+
+def check_interactive_elements_have_names():
+    """A link announced as "link" tells a screen reader user nothing.
+
+    Swept over every page, not just index.html, for the same reason
+    verify_content.py sweeps every page for unclosed list items: the defect
+    is not specific to the page it was first found on.
+    """
+    print("\nEvery link and button has an accessible name")
+
+    for path in HTML_PAGES:
+        source = read(path)
+        if source is None:
+            continue
+
+        parser = AccessibleNames()
+        parser.feed(source)
+        if parser.problems:
+            for problem in parser.problems:
+                fail("%s %s" % (path.name, problem))
+        else:
+            print("  PASS  %s names every link, button, and icon" % path.name)
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -494,6 +645,8 @@ def main():
     check_share_card_exists_and_fits()
     check_homepage_carries_share_tags()
     check_homepage_has_person_structured_data()
+    check_images_have_alt_text()
+    check_interactive_elements_have_names()
 
     print()
     if failures:
