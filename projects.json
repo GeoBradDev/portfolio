@@ -1,0 +1,68 @@
+{
+  "generated": "2026-08-13T11:23:51Z",
+  "projects": [
+    {
+      "name": "WebGIS-React",
+      "description": "Modern React frontend for WebGIS applications, featuring Leaflet maps, Zustand state management, and Material UI components. Built with Vite and deployed via Render. Designed to integrate seamlessly with a Django Ninja + PostGIS backend.",
+      "language": "JavaScript",
+      "stars": 3,
+      "code": "https://github.com/GeoBradDev/WebGIS-React",
+      "demo": null,
+      "pushed": "2025-07-30T15:36:06Z"
+    },
+    {
+      "name": "WebGIS-Django",
+      "description": "Full-featured WebGIS backend built with Django, Django Ninja, and PostGIS. Includes authentication with Django Allauth, REST API support, CORS handling, and production-ready deployment via Gunicorn and Whitenoise. Ideal for geospatial web apps with modern Python tooling and Pydantic validation.",
+      "language": "Python",
+      "stars": 6,
+      "code": "https://github.com/GeoBradDev/WebGIS-Django",
+      "demo": null,
+      "pushed": "2025-07-26T20:25:12Z"
+    },
+    {
+      "name": "WebGIS-React-Native",
+      "description": "A universal mobile WebGIS template built with React Native, Expo, and OpenStreetMap. Works seamlessly with the WebGIS-Django backend for full-stack geospatial applications on Android and iOS.",
+      "language": "TypeScript",
+      "stars": 1,
+      "code": "https://github.com/GeoBradDev/WebGIS-React-Native",
+      "demo": null,
+      "pushed": "2025-06-18T21:12:10Z"
+    },
+    {
+      "name": "WWJC_ChromeExtension",
+      "description": "WWJC Bot is a Chrome extension and AI backend that challenges contradictions using the moral framework of Christian scripture.",
+      "language": "JavaScript",
+      "stars": 1,
+      "code": "https://github.com/GeoBradDev/WWJC_ChromeExtension",
+      "demo": "https://chromewebstore.google.com/detail/jciagnjgbhalahmkpjmhckkjhflacnno/",
+      "pushed": "2025-05-23T21:55:53Z"
+    },
+    {
+      "name": "QuakeGlobe",
+      "description": "QuakeGlobe is a real-time 3D earthquake visualizer built with CesiumJS, React, and the USGS Earthquake API. Filter by magnitude and depth, animate seismic events over time, and explore global quakes on an interactive Cesium globe.",
+      "language": "TypeScript",
+      "stars": 0,
+      "code": "https://github.com/GeoBradDev/QuakeGlobe",
+      "demo": "https://quakeglobe.onrender.com/",
+      "pushed": "2025-05-23T21:04:16Z"
+    },
+    {
+      "name": "STLTaxAuctionGeoprocessing",
+      "description": "Automates extraction, standardization, and geospatial matching of St. Louis property tax auction data. Downloads the latest sheriff sale PDF, parses property info with regex, and uses fuzzy matching to join addresses to parcel shapefiles via GeoPandas. Outputs clean CSVs for spatial analysis and QA.",
+      "language": "Python",
+      "stars": 1,
+      "code": "https://github.com/GeoBradDev/STLTaxAuctionGeoprocessing",
+      "demo": null,
+      "pushed": "2025-05-12T02:47:53Z"
+    },
+    {
+      "name": "St-Louis-Neighborhood-Atlas",
+      "description": "ArcGIS Pro Python script for generating a printable PDF map book of every neighborhood in St. Louis. Automates layout export using arcpy.mp, with dynamic extents, locator maps, and labeled pages. Includes custom cover page support and outputs a complete atlas with per-neighborhood maps. Ideal for planning and municipal documentation.",
+      "language": "Python",
+      "stars": 0,
+      "code": "https://github.com/GeoBradDev/St-Louis-Neighborhood-Atlas",
+      "demo": null,
+      "pushed": "2023-02-06T14:48:15Z"
+    }
+  ]
+}

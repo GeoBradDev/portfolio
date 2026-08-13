@@ -72,6 +72,9 @@ SHIPPED_VARIANTS = [
 # 2560 hero variants are excluded because a mobile viewport never requests them.
 HOMEPAGE_ASSETS = [
     "index.html",
+    # The portfolio data, fetched by the inline renderer on every load since
+    # issue 20 replaced its three GitHub API calls with one same-origin file.
+    "projects.json",
     "css/bootstrap.min.css",
     "css/font-awesome.min.css",
     "css/style.css",

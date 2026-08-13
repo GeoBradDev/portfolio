@@ -44,8 +44,9 @@ NOT_FOUND = ROOT / "404.html"
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 
 # Portfolio card text, as (selector, background when the rule declares none).
-# The cards are built by the inline renderer in index.html and styled by the
-# embedded CSS in the same file, so both live there rather than in style.css.
+# The cards are built by the inline renderer in index.html, but issue 20 moved
+# their CSS out of a JavaScript string in that file and into style.css, so this
+# reads the stylesheet the way check_focus_ring_contrast already does.
 CONTRAST_PAIRS = [
     (".portfolio-title", "#ffffff"),
     (".portfolio-description p", "#ffffff"),
@@ -53,6 +54,7 @@ CONTRAST_PAIRS = [
     (".portfolio-language", None),   # declares its own background
     (".portfolio-link-code", "#ffffff"),
     (".portfolio-link-demo", None),  # declares its own background
+    (".portfolio-error", None),      # declares its own background
 ]
 CONTRAST_MINIMUM = 4.5
 
@@ -1104,18 +1106,19 @@ def check_text_contrast():
     levels up.
 
     AA is 4.5:1 for body text. Every pair below is body text: the largest is
-    14px, well under the 18.66px bold or 24px regular that would qualify for
+    16px, well under the 18.66px bold or 24px regular that would qualify for
     the 3:1 large-text threshold.
     """
     print("\nCard text meets the AA contrast threshold")
 
-    source = read_markup_or_fail(INDEX)
+    source = read_or_fail(STYLE_CSS)
     if source is None:
         return
+    source = without_comments(source, "css")
 
     for selector, assumed_background in CONTRAST_PAIRS:
         body = rule_body(source, selector)
-        if not check(body is not None, "index.html styles %s" % selector):
+        if not check(body is not None, "css/style.css styles %s" % selector):
             continue
 
         foreground = declared_color(body, "color")
