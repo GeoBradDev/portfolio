@@ -31,7 +31,13 @@ INDEX = ROOT / "index.html"
 RESUME = ROOT / "resume.html"
 THANKS = ROOT / "thanks.html"
 STYLE_CSS = ROOT / "css" / "style.css"
+MAIN_JS = ROOT / "js" / "main.js"
 CNAME = ROOT / "CNAME"
+
+# Every page at the repo root, discovered from the filesystem rather than
+# hardcoded, so a page added later is covered instead of silently exempt.
+# Same rule verify_security.py uses, and for the same reason.
+HTML_PAGES = sorted(ROOT.glob("*.html"))
 
 # Left over from the ThemeForest template. verify_assets.DEAD_ASSETS covers
 # the eight libraries and image originals that issue 15 removed; these two are
@@ -43,6 +49,13 @@ LEFTOVER_TEMPLATE_FILES = [
     # 330 KB referenced from no page, no stylesheet, and no script.
     "video/video.mp4",
 ]
+
+# Families that a bundled stylesheet defines rather than the page itself, as
+# lowercased family name -> the href substring that proves it is linked. A
+# page may name one of these without carrying its own @font-face.
+FONT_FAMILIES_FROM = {
+    "fontawesome": "css/font-awesome.min.css",
+}
 
 failures = []
 
@@ -138,11 +151,13 @@ def check_contact_form_returns_visitor():
 
     host = site_host()
     if check(host is not None, "CNAME names the site host"):
-        check(
-            parsed.netloc == host,
-            "_next points at the host CNAME names (%s), not %s"
-            % (host, parsed.netloc or "a relative path"),
-        )
+        if parsed.netloc == host:
+            print("  PASS  _next points at the host CNAME names (%s)" % host)
+        else:
+            fail(
+                "_next points at %s, but CNAME names %s"
+                % (parsed.netloc or "a relative path", host)
+            )
 
     target = ROOT / parsed.path.lstrip("/")
     check(
@@ -346,19 +361,27 @@ class ListMarkup(HTMLParser):
 
 
 def check_list_markup_is_balanced():
-    print("\nEvery list item in index.html is closed")
+    """Every page, not just index.html.
 
-    source = read_or_fail(INDEX)
-    if source is None:
-        return
+    The bug this guards is an <li> a browser silently auto-closes, and any
+    page with a list can carry it. resume.html has lists; scanning only the
+    page the bug happened to be found on would let the next one ship green.
+    """
+    print("\nEvery list item is closed")
 
-    parser = ListMarkup()
-    parser.feed(source)
-    if parser.problems:
-        for problem in parser.problems:
-            fail("index.html %s" % problem)
-    else:
-        print("  PASS  index.html closes every <li>")
+    for path in HTML_PAGES:
+        source = read(path)
+        if source is None:
+            continue
+        name = path.relative_to(ROOT)
+
+        parser = ListMarkup()
+        parser.feed(source)
+        if parser.problems:
+            for problem in parser.problems:
+                fail("%s %s" % (name, problem))
+        else:
+            print("  PASS  %s closes every <li>" % name)
 
 
 def check_leftover_template_files_are_gone():
@@ -368,15 +391,17 @@ def check_leftover_template_files_are_gone():
         check(not (ROOT / name).exists(), "%s is gone" % name)
 
     # Deleting a file that something still points at trades dead weight for a
-    # broken link, so assert nothing references them either.
-    for page in (INDEX, RESUME, THANKS):
-        source = read(page)
+    # broken link, so assert nothing references them either. A stylesheet
+    # url() and a script fetch reach a deleted file exactly as an href does,
+    # so the scan covers CSS and JS, not only the pages.
+    for path in HTML_PAGES + [STYLE_CSS, MAIN_JS]:
+        source = read(path)
         if source is None:
             continue
         for name in LEFTOVER_TEMPLATE_FILES:
             check(
                 name not in source,
-                "%s does not reference %s" % (page.relative_to(ROOT), name),
+                "%s does not reference %s" % (path.relative_to(ROOT), name),
             )
 
 
@@ -388,6 +413,15 @@ def check_resume_declares_no_unloaded_font():
     Each one has to be backed by an @font-face on the page or a stylesheet
     link that names it, or the browser silently falls through to the next
     entry in the stack and the declaration misstates what actually renders.
+
+    Two limits, both deliberate. A linked stylesheet is matched by its URL
+    containing the family name, with the space spelled either as + or as
+    %20, since that is as far as a source-level check can see without
+    fetching and parsing the stylesheet. And a family defined inside an
+    already-linked external stylesheet, such as FontAwesome in
+    css/font-awesome.min.css, is recognized only through FONT_FAMILIES_FROM
+    below. Add an entry there rather than loosening the match when a page
+    starts declaring a family that some other stylesheet provides.
     """
     print("\nresume.html declares no font it does not load")
 
@@ -410,13 +444,23 @@ def check_resume_declares_no_unloaded_font():
             source,
             re.I | re.S,
         )
-        link = re.search(
-            r'<link[^>]+href="[^"]*' + re.escape(family.replace(" ", "+")),
-            source,
-            re.I,
+        # A Google Fonts href spells the space as +, a percent-encoded one
+        # spells it %20. Accept either rather than only the first.
+        spellings = {
+            family,
+            family.replace(" ", "+"),
+            family.replace(" ", "%20"),
+        }
+        link = any(
+            re.search(r'<link[^>]+href="[^"]*' + re.escape(spelling), source, re.I)
+            for spelling in spellings
         )
+        # A family that a linked stylesheet defines rather than the page.
+        provider = FONT_FAMILIES_FROM.get(family.lower())
+        provided = provider is not None and provider in source
+
         check(
-            face is not None or link is not None,
+            face is not None or link or provided,
             "resume.html loads the '%s' family it declares" % family,
         )
 
