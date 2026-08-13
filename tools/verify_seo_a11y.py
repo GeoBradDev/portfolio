@@ -674,6 +674,64 @@ def check_new_tab_links_carry_rel():
             print("  PASS  %s sets rel on every target=_blank link" % path.name)
 
 
+def check_form_controls_are_labelled():
+    """A placeholder is a hint, not a name.
+
+    It disappears the moment the field has content, which is exactly when a
+    user tabbing back through a half-filled form needs to know what the field
+    was. Every visible control needs a <label for>, an aria-label, or an
+    aria-labelledby.
+
+    The honeypot is deliberately exempt and deliberately skipped by shape
+    rather than by name: it is display:none, so no user of any kind reaches
+    it, and labelling it would advertise it to the bots it exists to catch.
+    """
+    print("\nEvery contact form control has a label")
+
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
+
+    form = re.search(r'<form\b[^>]*id="contact-form".*?</form>', source, re.S)
+    if not check(form is not None, "index.html has a contact form"):
+        return
+    form = form.group(0)
+
+    labelled_for = set(re.findall(r'<label\b[^>]*\bfor\s*=\s*"([^"]+)"', form, re.I))
+
+    controls = re.findall(r"<(?:input|textarea|select)\b[^>]*>", form, re.I)
+    visible = 0
+    for tag in controls:
+        attrs = dict(re.findall(r'\b([\w-]+)\s*=\s*"([^"]*)"', tag))
+        if attrs.get("type", "").lower() == "hidden":
+            continue
+        if "display:none" in attrs.get("style", "").replace(" ", ""):
+            continue
+        visible += 1
+
+        identifier = attrs.get("id", "")
+        named = (
+            (identifier and identifier in labelled_for)
+            or attrs.get("aria-label", "").strip()
+            or attrs.get("aria-labelledby", "").strip()
+        )
+        check(
+            bool(named),
+            "the %s control is labelled" % (identifier or attrs.get("name") or tag[:40]),
+        )
+
+    check(visible >= 3, "the form still has its name, email, and message controls")
+
+    # The FormSubmit wire contract. Renaming one of these does not break a
+    # check anywhere else in the repo, it just quietly changes or drops a
+    # field in the mail that arrives.
+    for field in ("name", "email", "message", "_next", "_subject"):
+        check(
+            re.search(r'\bname\s*=\s*"%s"' % re.escape(field), form) is not None,
+            "the form still posts a %s field" % field,
+        )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -685,6 +743,7 @@ def main():
     check_images_have_alt_text()
     check_interactive_elements_have_names()
     check_new_tab_links_carry_rel()
+    check_form_controls_are_labelled()
 
     print()
     if failures:

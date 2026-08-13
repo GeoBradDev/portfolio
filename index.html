@@ -482,14 +482,28 @@
             <div class="col-xs-12 col-md-10 col-md-offset-1">
                 <form id="contact-form" method="post" action="https://formsubmit.co/4b51b0ec8554c5d39e2f423af4b0abb3">
                     <div class="col-sm-6">
+                        <!-- Visually hidden rather than absent. The design has
+                             no room for three labels above three fields, but a
+                             placeholder is a hint, not a name: it disappears
+                             the moment the field has content, which is exactly
+                             when someone tabbing back through a half-filled
+                             form needs to know what the field holds. .sr-only
+                             is Bootstrap 3's, already loaded on this page.
+
+                             The name attributes below are the FormSubmit wire
+                             contract. Renaming one changes or drops a field in
+                             the mail that arrives. -->
+                        <label for="name" class="sr-only">Your name</label>
                         <input type="text" name="name" id="name" class="input-field" required="required"
                                placeholder="Name">
                     </div>
                     <div class="col-sm-6">
+                        <label for="email" class="sr-only">Your email address</label>
                         <input type="email" name="email" id="email" class="input-field" required="required"
                                placeholder="Email">
                     </div>
                     <div class="col-xs-12">
+                        <label for="message" class="sr-only">Your message</label>
                         <textarea name="message" id="message" class="input-field" required="required"
                                   placeholder="Message"></textarea>
                     </div>
