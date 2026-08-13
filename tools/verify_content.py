@@ -309,12 +309,54 @@ def check_leftover_template_files_are_gone():
             )
 
 
+def check_resume_declares_no_unloaded_font():
+    """A quoted family the page never loads is a declaration that does nothing.
+
+    Generic families (sans-serif, serif, monospace) are unquoted by CSS
+    convention and are always available, so only quoted names are checked.
+    Each one has to be backed by an @font-face on the page or a stylesheet
+    link that names it, or the browser silently falls through to the next
+    entry in the stack and the declaration misstates what actually renders.
+    """
+    print("\nresume.html declares no font it does not load")
+
+    source = read_or_fail(RESUME)
+    if source is None:
+        return
+
+    families = set()
+    for declaration in re.findall(r"font-family\s*:\s*([^;}]+)", source):
+        for single, double in re.findall(r"'([^']+)'|\"([^\"]+)\"", declaration):
+            families.add((single or double).strip())
+
+    if not families:
+        print("  PASS  resume.html names no webfont family it would have to load")
+        return
+
+    for family in sorted(families):
+        face = re.search(
+            r"@font-face[^}]*font-family\s*:\s*['\"]?" + re.escape(family),
+            source,
+            re.I | re.S,
+        )
+        link = re.search(
+            r'<link[^>]+href="[^"]*' + re.escape(family.replace(" ", "+")),
+            source,
+            re.I,
+        )
+        check(
+            face is not None or link is not None,
+            "resume.html loads the '%s' family it declares" % family,
+        )
+
+
 def main():
     check_contact_form_returns_visitor()
     check_thanks_page_is_a_complete_document()
     check_no_dead_form_error_markup()
     check_list_markup_is_balanced()
     check_leftover_template_files_are_gone()
+    check_resume_declares_no_unloaded_font()
 
     print()
     if failures:
