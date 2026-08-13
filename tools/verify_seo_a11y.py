@@ -637,6 +637,43 @@ def check_interactive_elements_have_names():
             print("  PASS  %s names every link, button, and icon" % path.name)
 
 
+def check_new_tab_links_carry_rel():
+    """target="_blank" hands the new tab a window.opener back to this page.
+
+    Every current browser implies noopener for target="_blank", so this is no
+    longer the tabnabbing hole it was. It is still worth stating: the implicit
+    behavior is a browser default rather than something this page asked for,
+    noreferrer is not implied at all, and a reader of the markup should not
+    have to know which browsers imply what.
+
+    The anchors in index.html wrap across source lines, and [^>]* spans
+    newlines, so a multi-line tag is matched whole rather than missed.
+    """
+    print("\nEvery new-tab link states its rel")
+
+    anchor = re.compile(r"<a\b[^>]*>", re.I)
+    for path in HTML_PAGES:
+        source = read(path)
+        if source is None:
+            continue
+
+        offenders = []
+        for tag in anchor.findall(source):
+            if not re.search(r'\btarget\s*=\s*"_blank"', tag, re.I):
+                continue
+            rel = re.search(r'\brel\s*=\s*"([^"]*)"', tag, re.I)
+            if rel is None or "noopener" not in rel.group(1).lower():
+                offenders.append(re.search(r'href\s*=\s*"([^"]*)"', tag, re.I))
+        if offenders:
+            for offender in offenders:
+                fail(
+                    "%s: target=_blank without rel=noopener (%s)"
+                    % (path.name, offender.group(1) if offender else "no href")
+                )
+        else:
+            print("  PASS  %s sets rel on every target=_blank link" % path.name)
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -647,6 +684,7 @@ def main():
     check_homepage_has_person_structured_data()
     check_images_have_alt_text()
     check_interactive_elements_have_names()
+    check_new_tab_links_carry_rel()
 
     print()
     if failures:
