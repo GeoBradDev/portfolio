@@ -1169,15 +1169,21 @@ Contact
     padding-left: 70px;
 }
 
-.contact-item .c-text h5 {
+/* h3 and h4, not h5 and h6. These sit under the <h2>Contact</h2> section
+   heading, so h5 skipped two levels and Lighthouse's heading-order audit
+   failed on it. The rendering is unchanged: the 13px below already overrode
+   whatever the base size was, and the 16px is h6's base size pinned so that
+   promoting the tag does not resize the text. */
+.contact-item .c-text h3 {
     margin: 0;
     margin-bottom: 2px;
     font-size: 13px;
     text-transform: uppercase;
 }
 
-.contact-item .c-text h6 {
+.contact-item .c-text h4 {
     margin: 0;
+    font-size: 16px;
     word-break: break-all;
 }
 

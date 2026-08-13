@@ -65,7 +65,7 @@
         }
 
         .contact-info a {
-            color: #3498db;
+            color: #2471a3;
             text-decoration: none;
         }
 
@@ -122,11 +122,21 @@
 
         .icon {
             margin-right: 8px;
-            color: #3498db;
+            color: #2471a3;
+        }
+
+        /* This was an inline style="color: #555" on the element, which no rule
+           could override, so in dark mode it stayed #555 on the #2a2a2a
+           container: 1.93:1, effectively invisible. As a class it can have a
+           dark variant. */
+        .location-line {
+            margin-top: 5px;
+            font-size: 0.95em;
+            color: #555;
         }
 
         a {
-            color: #3498db;
+            color: #2471a3;
             text-decoration: none;
         }
 
@@ -140,7 +150,7 @@
             margin: 20px auto;
             text-align: center;
             padding: 10px;
-            background-color: #3498db;
+            background-color: #2471a3;
             color: #fff;
             border-radius: 5px;
             text-decoration: none;
@@ -148,11 +158,11 @@
         }
 
         .download-btn:hover {
-            background-color: #2980b9;
+            background-color: #1b5a80;
         }
 
         .theme-toggle {
-            background-color: #3498db;
+            background-color: #2471a3;
             color: white;
             border: none;
             padding: 8px 16px;
@@ -163,7 +173,7 @@
         }
 
         .theme-toggle:hover {
-            background-color: #2980b9;
+            background-color: #1b5a80;
         }
 
         /* Dark mode styles applied via a class */
@@ -197,12 +207,16 @@
             color: #82cfff;
         }
 
+        body.dark-mode .location-line {
+            color: #b0b0b0;
+        }
+
         body.dark-mode h2 {
             border-color: #82cfff;
         }
 
         body.dark-mode .download-btn {
-            background-color: #2980b9;
+            background-color: #2471a3;
             color: white;
         }
 
@@ -348,7 +362,7 @@
                 href="https://www.linkedin.com/in/brad-stricherz-944999349/">LinkedIn</a> |
             <i class="fa fa-github icon" aria-hidden="true"></i><a href="https://github.com/GeoBradDev">GitHub</a>
         </p>
-        <p style="margin-top: 5px; font-size: 0.95em; color: #555;">
+        <p class="location-line">
             <i class="fa fa-map-marker icon" aria-hidden="true"></i>St. Louis, MO | TS/SCI Clearance
         </p>
         <button id="theme-toggle" class="theme-toggle">🌙 Dark Mode</button>
