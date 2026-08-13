@@ -402,6 +402,11 @@
                     </div>
                     <div id="form-message" class="error mb-30 text-center"></div>
                     <input type="text" name="_honey" style="display:none">
+                    <!-- Without _next, FormSubmit's confirmation page is on
+                         formsubmit.co and the visitor has no way back. The
+                         URL has to be absolute for FormSubmit to honor it. -->
+                    <input type="hidden" name="_next" value="https://www.geobrad.dev/thanks.html">
+                    <input type="hidden" name="_subject" value="New contact from GeoBrad.dev">
                     <button type="submit" class="effect submit-btn">Send Message</button>
 
                 </form>
