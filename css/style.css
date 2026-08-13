@@ -112,12 +112,30 @@ select:focus-visible {
     outline-offset: 3px;
 }
 
-/* Over the hero photo and the dark footer, a #232323 outline disappears into
-   the background. The same ring in white does not. */
+/* bootstrap.min.css carries `a:focus { outline: 5px auto -webkit-focus-ring-color }`
+   at the same (0,1,1) specificity as the rule above, and style.css loads after
+   it, so the deleted `outline: none` was the only thing suppressing it. Without
+   this, a mouse click on any anchor paints a 5px ring that stays until blur,
+   which is exactly what the rule above says it avoids. Keyed on :focus so it
+   reaches Bootstrap's declaration, and excluded on :focus-visible so it never
+   touches the keyboard ring. */
+a:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Over the hero photo, a #232323 ring disappears into the image. The nav sits
+   on the hero too while it is transparent. Everywhere else on the site the
+   surface is white or near-white, so the default dark ring is the readable
+   one: .footer is #f1f1f1, not dark, and .nav-sticky repaints the nav #fff
+   the moment the page scrolls past 100px, which is when a visitor is most
+   likely to be tabbing it. A white ring on either is invisible. */
 .home-1 a:focus-visible,
-.footer a:focus-visible,
 .nav-wrapper a:focus-visible {
     outline-color: #fff;
+}
+
+.nav-sticky a:focus-visible {
+    outline-color: #232323;
 }
 
 /* Parked above the viewport until focused, then pinned to the top left. The

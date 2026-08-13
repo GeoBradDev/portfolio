@@ -56,6 +56,10 @@ CONTRAST_PAIRS = [
 ]
 CONTRAST_MINIMUM = 4.5
 
+# WCAG 2.2 SC 1.4.11 non-text contrast. A focus indicator is its canonical
+# example, and it is a lower bar than the 4.5:1 body text needs.
+FOCUS_RING_MINIMUM = 3.0
+
 # Every page at the repo root, discovered from the filesystem rather than
 # hardcoded, so a page added later is covered instead of silently exempt.
 # Same rule verify_assets.py, verify_security.py, and verify_content.py use.
@@ -99,6 +103,37 @@ def read(path):
 def read_or_fail(path):
     """read(), plus turning a missing file into one FAIL line instead of None."""
     text = read(path)
+    check(text is not None, "%s exists" % path.relative_to(ROOT))
+    return text
+
+
+def without_comments(source, style):
+    """Strip comments so a scan reads code, not prose about code.
+
+    Same helper, and the same reason, as verify_content.without_comments and
+    verify_assets.without_comments. Every regex scan below reads raw markup,
+    and a comment has to quote the thing it explains: the comment in
+    index.html describing why the Bluesky links carry no aria-label contains
+    the text of an img tag, and this file reported it as a real image before
+    the strip was added.
+
+    AccessibleNames does not need this. HTMLParser routes comments to
+    handle_comment, which it does not implement, so they never reach the
+    element handlers.
+    """
+    pattern = r"/\*.*?\*/" if style == "css" else r"<!--.*?-->"
+    return re.sub(pattern, "", source, flags=re.S)
+
+
+def read_markup(path):
+    """read(), with HTML comments stripped. See without_comments."""
+    source = read(path)
+    return None if source is None else without_comments(source, "html")
+
+
+def read_markup_or_fail(path):
+    """read_markup(), plus one FAIL line for a missing file instead of None."""
+    text = read_markup(path)
     check(text is not None, "%s exists" % path.relative_to(ROOT))
     return text
 
@@ -152,7 +187,7 @@ def check_every_page_is_a_complete_document():
 
     titles = {}
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
         name = path.name
@@ -204,7 +239,7 @@ def check_every_page_has_a_description():
 
     seen = {}
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
         name = path.name
@@ -242,7 +277,7 @@ def check_every_page_declares_a_canonical():
         return
 
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
         name = path.name
@@ -274,7 +309,7 @@ def check_indexing_policy_is_explicit():
     print("\nEvery page states an indexing policy")
 
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
         name = path.name
@@ -375,7 +410,7 @@ def check_homepage_carries_share_tags():
     """
     print("\nThe homepage carries Open Graph and Twitter card tags")
 
-    source = read_or_fail(INDEX)
+    source = read_markup_or_fail(INDEX)
     if source is None:
         return
 
@@ -415,7 +450,7 @@ def check_homepage_carries_share_tags():
     for path in HTML_PAGES:
         if path == INDEX:
             continue
-        other = read(path)
+        other = read_markup(path)
         if other is None:
             continue
         check(
@@ -456,7 +491,7 @@ def check_homepage_has_person_structured_data():
     """
     print("\nThe homepage carries Person structured data")
 
-    source = read_or_fail(INDEX)
+    source = read_markup_or_fail(INDEX)
     if source is None:
         return
 
@@ -561,6 +596,12 @@ class AccessibleNames(HTMLParser):
         if self.stack:
             self.stack[-1]["text"] += data
 
+    def judge(self, frame):
+        if frame["interactive"] and not frame["named"] and not frame["text"].strip():
+            self.problems.append(
+                "line %d: <%s> has no accessible name" % (frame["line"], frame["tag"])
+            )
+
     def handle_endtag(self, tag):
         if tag not in ("a", "button") or not self.stack:
             return
@@ -571,13 +612,22 @@ class AccessibleNames(HTMLParser):
         # tag, which is exactly the malformed case worth reporting.
         while self.stack:
             frame = self.stack.pop()
-            if frame["interactive"] and not frame["named"] and not frame["text"].strip():
-                self.problems.append(
-                    "line %d: <%s> has no accessible name"
-                    % (frame["line"], frame["tag"])
-                )
+            self.judge(frame)
             if frame["tag"] == tag:
                 break
+
+    def finish(self):
+        """Judge whatever never closed.
+
+        An element that opens and never closes leaves its frame on the stack,
+        and handle_endtag only judges frames it pops. Without this, adding
+        <a href="/x"><i class="fa fa-rss" aria-hidden="true"></i> with no
+        </a> ships an unnamed link past a green gate. Verified: the same
+        markup with the closing tag was reported, and without it was not.
+        """
+        while self.stack:
+            self.judge(self.stack.pop())
+        return self.problems
 
 
 def check_images_have_alt_text():
@@ -603,7 +653,7 @@ def check_images_have_alt_text():
 
     machine_name = re.compile(r"[\d_-]")
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
 
@@ -643,12 +693,13 @@ def check_interactive_elements_have_names():
     print("\nEvery link and button has an accessible name")
 
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
 
         parser = AccessibleNames()
         parser.feed(source)
+        parser.finish()
         if parser.problems:
             for problem in parser.problems:
                 fail("%s %s" % (path.name, problem))
@@ -672,7 +723,7 @@ def check_new_tab_links_carry_rel():
 
     anchor = re.compile(r"<a\b[^>]*>", re.I)
     for path in HTML_PAGES:
-        source = read(path)
+        source = read_markup(path)
         if source is None:
             continue
 
@@ -707,7 +758,7 @@ def check_form_controls_are_labelled():
     """
     print("\nEvery contact form control has a label")
 
-    source = read_or_fail(INDEX)
+    source = read_markup_or_fail(INDEX)
     if source is None:
         return
 
@@ -766,10 +817,11 @@ def check_skip_link_and_focus_visibility():
     """
     print("\nThe skip link is first, and focus is visible")
 
-    source = read_or_fail(INDEX)
+    source = read_markup_or_fail(INDEX)
     css = read_or_fail(STYLE_CSS)
     if source is None or css is None:
         return
+    css = without_comments(css, "css")
 
     body = re.search(r"<body[^>]*>(.*)</body>", source, re.S | re.I)
     if not check(body is not None, "index.html has a body"):
@@ -818,6 +870,103 @@ def check_skip_link_and_focus_visibility():
         "css/style.css declares :focus-visible outlines (found %d)"
         % css.count(":focus-visible"),
     )
+
+    # bootstrap.min.css carries `a:focus { outline: 5px auto ... }` at the same
+    # (0,1,1) specificity, and style.css loads after it, so deleting the
+    # blanket `outline: none` unmasked it and mouse clicks painted a ring
+    # again. This is the rule that suppresses that without touching the
+    # keyboard ring, and it has to keep existing for as long as Bootstrap does.
+    check(
+        re.search(r"a:focus:not\(:focus-visible\)\s*\{[^}]*outline\s*:\s*none", css, re.S)
+        is not None,
+        "css/style.css suppresses Bootstrap's mouse-click a:focus ring",
+    )
+
+
+def grouped_rule_body(css, first_selector):
+    """The declaration block of the rule whose selector list starts here.
+
+    rule_body anchors on a selector standing alone. The focus rules are
+    written as grouped selectors, so `a:focus-visible,` opens a list that runs
+    several lines before the brace. Both shapes are accepted: the selector
+    followed straight by its brace, or followed by a comma and the rest of
+    the list first.
+    """
+    match = re.search(
+        r"(?m)^%s\s*(?:,[^{]*)?\{(.*?)\}" % re.escape(first_selector), css, re.S
+    )
+    return match.group(1) if match else None
+
+
+def declared_hex(body, prop):
+    """The first #rrggbb or #rgb in `prop`'s declaration, expanded.
+
+    Handles the shorthand: `outline: 2px solid #232323` keeps its color at
+    the end of the value, where declared_color's anchored pattern cannot see
+    it.
+    """
+    match = re.search(r"(?<![-\w])%s\s*:([^;}]*)" % prop, body)
+    if not match:
+        return None
+    found = re.search(r"#[0-9a-fA-F]{3,6}", match.group(1))
+    if not found:
+        return None
+    value = found.group(0)
+    if len(value) == 4:
+        value = "#" + "".join(char * 2 for char in value[1:])
+    return value.lower()
+
+
+def check_focus_ring_contrast():
+    """A focus ring you cannot see against its own surface is not an indicator.
+
+    WCAG 2.2 SC 1.4.11 puts non-text contrast at 3:1, and a focus indicator is
+    the canonical example. Both entries below were real: the first draft of
+    this stylesheet painted the ring white over the footer and over the nav,
+    on the strength of a comment calling the footer dark. The footer is
+    #f1f1f1, and .nav-sticky repaints the nav #fff as soon as the page scrolls
+    past 100px, which is exactly when a visitor is most likely to be tabbing
+    through it. Both rings were invisible.
+
+    The hero is deliberately absent. Its surface is a photograph under a 40
+    percent scrim, so there is no single background color to measure, and the
+    white ring there is a judgment call rather than a computation.
+    """
+    print("\nEvery focus ring contrasts with the surface it lands on")
+
+    css = read_or_fail(STYLE_CSS)
+    if css is None:
+        return
+    css = without_comments(css, "css")
+
+    default = grouped_rule_body(css, "a:focus-visible")
+    if not check(default is not None, "css/style.css declares a default focus ring"):
+        return
+    default_color = declared_hex(default, "outline")
+    if not check(default_color is not None, "the default focus ring names a color"):
+        return
+
+    surfaces = [
+        (default_color, "#ffffff", "the default ring on the page background"),
+        (default_color, "#f1f1f1", "the default ring on the footer"),
+    ]
+
+    sticky = grouped_rule_body(css, ".nav-sticky a:focus-visible")
+    if check(
+        sticky is not None,
+        "css/style.css gives the sticky nav its own focus ring color",
+    ):
+        sticky_color = declared_hex(sticky, "outline-color")
+        if check(sticky_color is not None, "the sticky nav ring names a color"):
+            surfaces.append((sticky_color, "#ffffff", "the sticky nav ring on its white bar"))
+
+    for ring, surface, label in surfaces:
+        ratio = contrast_ratio(ring, surface)
+        check(
+            ratio >= FOCUS_RING_MINIMUM,
+            "%s is %.2f:1 (%s on %s), at or above %.1f:1"
+            % (label, ratio, ring, surface, FOCUS_RING_MINIMUM),
+        )
 
 
 def check_site_root_files():
@@ -884,7 +1033,7 @@ def check_site_root_files():
                     expected = "https://%s/%s" % (host, page)
                 check(expected in locations, "sitemap lists %s" % expected)
 
-    source = read(NOT_FOUND)
+    source = read_markup(NOT_FOUND)
     if check(source is not None, "404.html exists"):
         check(
             source.lstrip().lower().startswith("<!doctype html>"),
@@ -960,7 +1109,7 @@ def check_text_contrast():
     """
     print("\nCard text meets the AA contrast threshold")
 
-    source = read_or_fail(INDEX)
+    source = read_markup_or_fail(INDEX)
     if source is None:
         return
 
@@ -1001,6 +1150,7 @@ def main():
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()
+    check_focus_ring_contrast()
     check_site_root_files()
     check_text_contrast()
 

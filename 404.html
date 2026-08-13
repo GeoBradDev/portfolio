@@ -14,7 +14,12 @@
     <!-- The same Lato the rest of the site loads, so a mistyped URL still
          lands somewhere that looks like this site. -->
     <link href="https://fonts.googleapis.com/css?family=Lato:400,400i,700,700i" rel="stylesheet">
-    <link rel="icon" href="img/favicon.ico">
+
+    <!-- Root-absolute, unlike every other page's. GitHub Pages serves this
+         document at whatever URL was requested, without redirecting, so the
+         document base is the mistyped path: a relative href would resolve
+         /blog/post to /blog/img/favicon.ico and find nothing. -->
+    <link rel="icon" href="/img/favicon.ico">
 
     <style>
         /* Lifted from thanks.html, which lifted it from css/style.css: the
