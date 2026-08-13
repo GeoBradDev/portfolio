@@ -325,14 +325,25 @@ def check_inline_script_syntax():
     # is not meant to see.
     inline = re.compile(r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", re.S)
 
-    for path in (INDEX, RESUME):
+    # Iterating (INDEX, RESUME) exempted any page added later, which is the
+    # same silent-exemption bug the HTML_PAGES glob was introduced to fix for
+    # the other checks. Sweep every discovered page instead.
+    for path in HTML_PAGES:
         source = read_or_fail(path)
         if source is None:
             continue
         blocks = inline.findall(source)
         name = path.relative_to(ROOT)
 
-        if not check(bool(blocks), "%s has an inline script to check" % name):
+        # index.html and resume.html are expected to carry inline script, so
+        # finding none there means the extraction pattern broke rather than
+        # that the script is gone. A page that legitimately has none,
+        # thanks.html or the Termly privacy paste, must not fail for that.
+        if path in (INDEX, RESUME):
+            if not check(bool(blocks), "%s has an inline script to check" % name):
+                continue
+        elif not blocks:
+            print("  skip  %s has no inline script" % name)
             continue
 
         for number, body in enumerate(blocks, start=1):

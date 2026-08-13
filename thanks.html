@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Message Sent | Brad Stricherz</title>
+
+    <!-- A confirmation page has nothing to offer a search result, and indexing
+         it would put a dead end in front of someone who never sent anything. -->
+    <meta name="robots" content="noindex">
+
+    <!-- The same Lato the rest of the site loads. A visitor lands here from
+         formsubmit.co, so matching type is what tells them they are back on
+         the site they submitted from. -->
+    <link href="https://fonts.googleapis.com/css?family=Lato:400,400i,700,700i" rel="stylesheet">
+    <link rel="icon" href="img/favicon.ico">
+
+    <style>
+        /* Palette, type, and both structural devices below are lifted from
+           css/style.css rather than invented: the 55px rule is .s-line, and
+           the button is .submit-btn, which fills #333 and inverts to
+           transparent on hover. This page is standalone, like resume.html,
+           so it carries its own copy of them instead of pulling in
+           bootstrap.min.css and style.css for four elements. */
+        body {
+            margin: 0;
+            padding: 30px;
+            box-sizing: border-box;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Lato', sans-serif;
+            font-size: 15px;
+            font-weight: 400;
+            line-height: 1.75;
+            letter-spacing: 1px;
+            background-color: #fff;
+            color: #484848;
+        }
+
+        .panel {
+            max-width: 480px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #333;
+        }
+
+        .rule {
+            margin: 12px auto 0;
+            width: 55px;
+            height: 1px;
+            background-color: #333;
+        }
+
+        p {
+            margin: 22px 0 30px;
+            font-size: 16px;
+            line-height: 26px;
+        }
+
+        /* The default link blue would be the only saturated pixel on the
+           site. Underline carries the affordance instead of color. */
+        p a {
+            color: #333;
+            text-decoration: underline;
+        }
+
+        p a:hover {
+            color: #111;
+        }
+
+        .back-btn {
+            display: inline-block;
+            padding: 8px 20px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            border: 2px solid #333;
+            background-color: #333;
+            color: #fafafa;
+            transition: all .4s ease-in-out;
+        }
+
+        .back-btn:hover {
+            color: #111;
+            background-color: transparent;
+        }
+
+        /* Keyboard users get an outline the hover state cannot supply, and it
+           has to sit outside the border to stay visible against the fill. */
+        .back-btn:focus-visible {
+            outline: 2px solid #333;
+            outline-offset: 3px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .back-btn {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="panel">
+    <h1>Message sent</h1>
+    <div class="rule"></div>
+    <p>It is on its way to <a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a>, and I will reply from there.</p>
+    <a class="back-btn" href="/">Back to GeoBrad.dev</a>
+</div>
+
+</body>
+</html>

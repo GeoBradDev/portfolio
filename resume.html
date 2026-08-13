@@ -7,7 +7,11 @@
     <link rel="stylesheet" href="css/font-awesome.min.css">
     <style>
         body {
-            font-family: 'Roboto', sans-serif;
+            /* No webfont is loaded here on purpose. This page is printed to
+               PDF regularly, so it stays free of third party requests, and
+               naming a family the page never fetches only misstates what
+               actually renders. */
+            font-family: sans-serif;
             font-size: 13px;
             margin: 0;
             padding: 0;

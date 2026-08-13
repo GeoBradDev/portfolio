@@ -34,8 +34,9 @@ the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3
 not downgrade one without the other.
 
 Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, linked from
-`index.html` and `resume.html`. `privacy.html` has no `<link>` tags and no `fa-` icons, so it
-neither links the stylesheet nor needs it; do not add an icon there without adding the link.
+`index.html` and `resume.html`. `privacy.html` has no `<link>` tags and no `fa-` icons, and
+`thanks.html` has `<link>` tags but no `fa-` icons, so neither links the stylesheet nor needs it;
+do not add an icon to either without adding the link.
 `resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
 majors, two syntaxes, and a third party on the critical path. Use bare `fa fa-*` classes; the
 FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rejects them.
@@ -45,6 +46,7 @@ FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rej
 - `index.html` - Main portfolio page with sections: home, about, services, portfolio, contact
 - `resume.html` - Interactive resume with dark mode toggle
 - `privacy.html` - Privacy policy page (158KB)
+- `thanks.html` - Contact form confirmation page. Standalone, no JavaScript.
 - `css/style.css` - Main custom styles
 - `js/main.js` - Navigation, scroll, and skill-bar logic. Loaded by `index.html` only.
 - `img/` - Images including profile photo, badges (Cesium certification, QR code)
@@ -116,6 +118,22 @@ Function names, not line numbers, because line numbers go stale.
 - Uses FormSubmit service (https://formsubmit.co/) - no backend required
 - Form action points to encrypted FormSubmit email endpoint
 - There is no client-side validation. The commented-out block that used to sit in `js/main.js` was deleted in issue #16; the form relies on the `required` attributes and FormSubmit.
+- Two hidden fields carry the post-submit contract. `_next` is
+  `https://www.geobrad.dev/thanks.html`; without it FormSubmit leaves the visitor on its own
+  confirmation page and they never come back. `_subject` labels the mail. `verify_content.py`
+  asserts `_next` is https, points at the host `CNAME` names rather than a hardcoded one, and
+  names a page that exists in the repo, because a `_next` pointing at a 404 is worse than none.
+  The URL has to be absolute for FormSubmit to honor it.
+- FormSubmit's captcha is left on. It adds an interstitial before the redirect, not instead of it.
+- The `#form-message` div and the `.name-error` / `.email-error` / `.message-error` spans were
+  deleted in issue #18. Nothing had written to them since #16. They were dead as content but not
+  weightless: each was `display: block` with `margin-top: 8px` plus `.mb-30`, inside floated grid
+  columns where those margins could not collapse away, and removing them alone collapsed the form
+  from 387px to 289px. `.input-field`'s `margin-bottom`, `textarea.input-field`'s `margin-bottom`,
+  and `.submit-btn`'s `clear` now carry that spacing, and `verify_content.py` asserts all three.
+  Do not move the pre-button gap onto `.submit-btn` as a `margin-top`: every field sits in a
+  floated column, so the button's static position is the top of the form and `clear: both` turns
+  any `margin-top` into clearance that absorbs it.
 
 ### Visual Effects
 - No parallax. See the `js/main.js` section above for why it was removed.
@@ -198,6 +216,11 @@ every `<img>` carries explicit `width`/`height`, the hero stays under 300 KB, an
 homepage stays under 1 MB. Standard library only. Run it after touching any asset,
 markup `<img>` tag, or `<script>`/`<link>` tag.
 
+The dead-asset sweep and the `<img>` dimension scan discover pages with a glob over `*.html` at
+the repo root, like `verify_security.py` and `verify_content.py`. They used to name `index.html`
+and `resume.html` by hand, which left `thanks.html` exempt from both the moment it was added. A
+page with no `<img>` prints a skip line rather than passing silently.
+
 ### Verifying the security criteria
 
 ```bash
@@ -220,8 +243,13 @@ it is a vendor-generated Termly document nobody hand-authored, so a regenerated 
 an `http://` link would fail the gate with no exclusion mechanism.
 
 It also runs `node --check` over every inline `<script>` on those pages, the way
-`verify_interactivity.py` does for `js/main.js`. Any script tag without a `src` is gated,
-including `type="module"` and `defer`; only external `src` tags are skipped. The gated inline
+`verify_interactivity.py` does for `js/main.js`. That loop named `index.html` and `resume.html`
+by hand until issue #18; it now sweeps the same globbed page set as everything else, so a new
+page is not exempt. Those two are still asserted to carry an inline script, since finding none
+there means the extraction pattern broke rather than that the script is gone; a page that
+legitimately has none, `thanks.html` or the Termly privacy paste, prints a skip line instead.
+Any script tag without a `src` is gated, including `type="module"` and `defer`; only external
+`src` tags are skipped. The gated inline
 `<script>` in `index.html` runs 466 lines total; about 301 of those are an embedded
 CSS-as-a-string block injected via `insertAdjacentHTML`, leaving roughly 165 lines of actual
 portfolio-renderer JavaScript, and before this it had no syntax gate at all. `node` is a
@@ -236,6 +264,36 @@ builds DOM nodes and sets `textContent`; the checks only stop that defense from 
 undone. They are also blunt in the other direction: any interpolation at those sites fails,
 including a safe `${escapeHtml(x)}`, so introducing an escaping helper means changing the rule
 first.
+
+### Verifying the content criteria
+
+```bash
+python3 tools/verify_content.py
+```
+
+Exits 0 when the issue #18 acceptance criteria still hold: the contact form carries a `_next`
+that is https, on the host `CNAME` names, and pointing at a page that exists, plus a `_subject`;
+`thanks.html` is a complete document with a doctype, charset, viewport, title, and a link back;
+no dead form-validation markup or CSS has returned and the spacing that replaced it is still
+declared; every `<li>` on every page is closed; the leftover template files stay deleted and
+unreferenced; and `resume.html` declares no font family it does not load. Standard library only.
+Run it after touching the contact form, `thanks.html`, the contact CSS, or a font stack.
+
+Two things about it that are easy to trip over:
+
+- It strips comments before scanning for dead markup and dead selectors. The checks assert a
+  selector is no longer styled and an element is no longer in the markup, and the comment
+  explaining why something was removed has to name it. A bare substring scan counted that
+  explanation as the offense it documents.
+- Like `verify_security.py`, it globs `*.html` at the repo root, so a new page is swept the
+  moment it exists.
+
+**Two of issue #18's acceptance criteria were declined by the site owner and are deliberately not
+implemented or checked.** `resume.html` is not linked from the nav: the resume is sent on request
+rather than published. `privacy.html` is not linked from the footer: that policy belongs to a
+different project and is hosted here only so its existing URL keeps resolving. Both pages stay in
+the tree, reachable by URL and linked from nowhere. Do not "fix" either as an oversight. Being
+unlinked exempts them from nothing, since both verifiers discover pages by glob.
 
 ### Regenerating optimized images
 
@@ -281,6 +339,11 @@ Edit `resume.html` - it's a standalone HTML file with inline styles and JavaScri
 The form submits to FormSubmit (the `<form id="contact-form">` action in index.html). To change:
 - Update the action URL with new FormSubmit endpoint
 - Honeypot field is present for spam protection (the hidden `_honey` input)
+- `_next` and `thanks.html` move together. Renaming or deleting the page without updating the
+  hidden field sends every visitor who submits the form to a 404, which is why
+  `verify_content.py` resolves the `_next` path against the repo
+- `_next` is absolute and must stay on the host `CNAME` names. Changing the custom domain means
+  changing this value too, and the verifier fails until both agree
 
 ### Adding/Changing Images
 Every raster image ships at roughly 2x its largest CSS display size, as WebP with a
@@ -316,4 +379,4 @@ No build or deployment scripts needed - changes go live automatically after push
 - **Bootstrap 3**: Using older Bootstrap version. Upgrading requires CSS/HTML updates
 - **Responsive Design**: Mobile-responsive via Bootstrap grid and custom media queries
 - **Browser Support**: Targets modern browsers with fallbacks for animations
-- **Dead CSS remains**: `css/style.css` still holds rules for the removed libraries (`#particles-js`, `.owl-*`, `.mfp-*`, `.home-carousel`, `.testimonial-slider`). Unmatched selectors are harmless; cleanup is tracked separately in issue #18.
+- **Dead CSS remains**: `css/style.css` still holds rules for the removed libraries (`#particles-js`, `.owl-*`, `.mfp-*`, `.home-carousel`, `.testimonial-slider`). Unmatched selectors are harmless. This was previously described here as "tracked separately in issue #18", which was wrong: issue #18 turned out to be the content and navigation issue and did not touch them. No open issue covers this cleanup, so file one before assuming someone else will.

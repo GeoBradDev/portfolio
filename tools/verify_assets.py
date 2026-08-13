@@ -9,12 +9,21 @@ Exits 0 when every criterion holds, 1 otherwise. Standard library only, so it
 runs anywhere Python 3 does and adds no build step to the site.
 """
 
+import glob
 import os
 import re
 import sys
 
 HOMEPAGE_BUDGET = 1024 * 1024
 HERO_BUDGET = 300 * 1024
+
+# Every page at the repo root, discovered from the filesystem rather than
+# hardcoded. The two scans at the bottom of this file used to list
+# index.html and resume.html by hand, which left thanks.html exempt from both
+# the moment it was added: an <img> without width/height there, or a
+# reference to a deleted original, reported "All checks passed". Same rule
+# verify_security.py and verify_content.py use, for the same reason.
+HTML_PAGES = sorted(glob.glob("*.html"))
 
 # Libraries removed because no element on the page keys off them.
 DEAD_ASSETS = [
@@ -116,7 +125,7 @@ def main():
     )
 
     print("\nNo dead references in markup or CSS")
-    for page in ("index.html", "resume.html"):
+    for page in HTML_PAGES:
         body = open(page, encoding="utf-8").read()
         for path in DEAD_ASSETS:
             name = os.path.basename(path)
@@ -126,9 +135,13 @@ def main():
         check(name not in css, "css/style.css does not reference %s" % name)
 
     print("\nEvery img has explicit width and height")
-    for page in ("index.html", "resume.html"):
+    for page in HTML_PAGES:
         body = open(page, encoding="utf-8").read()
-        for tag in re.findall(r"<img\b[^>]*>", body):
+        tags = re.findall(r"<img\b[^>]*>", body)
+        if not tags:
+            print("  skip  %s has no <img>" % page)
+            continue
+        for tag in tags:
             has_dims = "width=" in tag and "height=" in tag
             label = re.search(r'src="([^"]*)"', tag)
             label = label.group(1) if label else tag[:40]
