@@ -4,28 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>Message Sent | Brad Stricherz</title>
+    <title>Page Not Found | Brad Stricherz</title>
+    <meta name="description" content="That page does not exist on GeoBrad.dev. Head back to the homepage for geospatial software work, services, and contact details.">
+    <link rel="canonical" href="https://www.geobrad.dev/404.html">
 
-    <!-- A confirmation page has nothing to offer a search result, and indexing
-         it would put a dead end in front of someone who never sent anything. -->
+    <!-- An error page has nothing to offer a search result. -->
     <meta name="robots" content="noindex">
 
-    <meta name="description" content="Confirmation that your message to Brad Stricherz at GeoBrad.dev was sent, with a link back to the site.">
-    <link rel="canonical" href="https://www.geobrad.dev/thanks.html">
-
-    <!-- The same Lato the rest of the site loads. A visitor lands here from
-         formsubmit.co, so matching type is what tells them they are back on
-         the site they submitted from. -->
+    <!-- The same Lato the rest of the site loads, so a mistyped URL still
+         lands somewhere that looks like this site. -->
     <link href="https://fonts.googleapis.com/css?family=Lato:400,400i,700,700i" rel="stylesheet">
-    <link rel="icon" href="img/favicon.ico">
+
+    <!-- Root-absolute, unlike every other page's. GitHub Pages serves this
+         document at whatever URL was requested, without redirecting, so the
+         document base is the mistyped path: a relative href would resolve
+         /blog/post to /blog/img/favicon.ico and find nothing. -->
+    <link rel="icon" href="/img/favicon.ico">
 
     <style>
-        /* Palette, type, and both structural devices below are lifted from
-           css/style.css rather than invented: the 55px rule is .s-line, and
-           the button is .submit-btn, which fills #333 and inverts to
-           transparent on hover. This page is standalone, like resume.html,
-           so it carries its own copy of them instead of pulling in
-           bootstrap.min.css and style.css for four elements. */
+        /* Lifted from thanks.html, which lifted it from css/style.css: the
+           55px rule is .s-line and the button is .submit-btn, which fills
+           #333 and inverts to transparent on hover. Two standalone pages
+           carrying the same forty lines beats either of them pulling in
+           bootstrap.min.css and style.css for one panel. */
         body {
             margin: 0;
             padding: 30px;
@@ -69,17 +70,6 @@
             line-height: 26px;
         }
 
-        /* The default link blue would be the only saturated pixel on the
-           site. Underline carries the affordance instead of color. */
-        p a {
-            color: #333;
-            text-decoration: underline;
-        }
-
-        p a:hover {
-            color: #111;
-        }
-
         .back-btn {
             display: inline-block;
             padding: 8px 20px;
@@ -114,9 +104,9 @@
 <body>
 
 <div class="panel">
-    <h1>Message sent</h1>
+    <h1>Page not found</h1>
     <div class="rule"></div>
-    <p>It is on its way to <a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a>, and I will reply from there.</p>
+    <p>That URL does not lead anywhere on this site. It may have moved, or the link that sent you here may be wrong.</p>
     <a class="back-btn" href="/">Back to GeoBrad.dev</a>
 </div>
 

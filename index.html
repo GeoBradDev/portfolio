@@ -10,6 +10,80 @@
     <title>Brad Stricherz | Geospatial Software Engineer</title>
     <meta name="description" content="Brad Stricherz builds open-source mapping and spatial analysis tools for nonprofits, researchers, and community organizers. React, Django, PostGIS, and CesiumJS.">
 
+    <!-- The site answers on both geobrad.dev and www.geobrad.dev. Without this
+         those are two URLs for one page and ranking signals split between
+         them. tools/verify_seo_a11y.py reads the host from CNAME, so changing
+         the custom domain fails the gate until this agrees. -->
+    <link rel="canonical" href="https://www.geobrad.dev/">
+
+    <!-- Open Graph. Slack, LinkedIn, Bluesky, Discord, and iMessage all read
+         these; Twitter reads twitter:card and falls back to og:* for the
+         rest, so only the card type is repeated below. og:image must be
+         absolute, because a crawler resolves a relative URL against its own
+         base and silently ends up with no image.
+
+         These live on index.html alone. The other pages carry a noindex and
+         are linked from nowhere, and a share card on a page nobody is meant
+         to share is markup that can only ever go stale. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="GeoBrad.dev">
+    <meta property="og:title" content="Brad Stricherz | Geospatial Software Engineer">
+    <meta property="og:description" content="Open-source mapping and spatial analysis tools for nonprofits, researchers, and community organizers. React, Django, PostGIS, and CesiumJS.">
+    <meta property="og:url" content="https://www.geobrad.dev/">
+    <meta property="og:image" content="https://www.geobrad.dev/img/og-card.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Brad Stricherz, Geospatial Software Engineer, over a photo of a wing foiler on open water">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- Every field here is something the page itself states: the name and
+         title from the hero, the email, phone, and location from the contact
+         block, the degree from the About copy, and the profiles from the
+         social lists. Structured data that outruns the page is what Google's
+         guidelines call out, and it is also what goes stale first, which is
+         why the employer named on resume.html is absent: index.html never
+         mentions it.
+
+         verify_security.py routes this block to a JSON parser rather than to
+         node --check, because node reads the first colon as a syntax error. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Brad Stricherz",
+      "url": "https://www.geobrad.dev/",
+      "image": "https://www.geobrad.dev/img/portrait-340.jpg",
+      "jobTitle": "Geospatial Software Engineer",
+      "email": "mailto:Brad@GeoBrad.dev",
+      "telephone": "+1-605-270-0565",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "St. Louis",
+        "addressRegion": "MO",
+        "addressCountry": "US"
+      },
+      "alumniOf": {
+        "@type": "CollegeOrUniversity",
+        "name": "Pennsylvania State University"
+      },
+      "knowsAbout": [
+        "Geographic Information Systems",
+        "Spatial Data Science",
+        "WebGIS",
+        "PostGIS",
+        "CesiumJS"
+      ],
+      "sameAs": [
+        "https://github.com/GeoBradDev",
+        "https://www.linkedin.com/in/brad-stricherz-944999349/",
+        "https://bsky.app/profile/geobrad.bsky.social",
+        "https://www.youtube.com/stricherz13",
+        "https://www.instagram.com/GeoBradDev/",
+        "https://www.facebook.com/brad.stricherz/"
+      ]
+    }
+    </script>
+
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
 
@@ -43,6 +117,12 @@
 </head>
 <body>
 
+<!-- First focusable element in the document on purpose. Without it a keyboard
+     user tabs the whole nav on every page load before reaching any content.
+     It targets #about rather than #home because the hero holds no content to
+     read, only the headline and the chevron. -->
+<a class="skip-link" href="#about">Skip to content</a>
+
 <!-- Loader -->
 <div class="loader-con">
     <div class="spinner center">
@@ -66,7 +146,11 @@
                     <span class="icon-bar"></span>
                     <span class="icon-bar"></span>
                 </button>
-                <a class="navbar-brand effect" href="index.html"></a>
+                <!-- Styled for a wordmark that was never filled in. Until one
+                     is, the link still lands in the tab order and still needs
+                     a name, or it announces as a bare "link" at the top of
+                     every keyboard pass over the page. -->
+                <a class="navbar-brand effect" href="index.html" aria-label="Brad Stricherz, home"></a>
             </div>
 
             <!-- Collect the nav links, forms, and other content for toggling -->
@@ -97,10 +181,15 @@
             </div>
             <h1>I'm Brad Stricherz</h1>
             <h2 class="typer-title">A Geospatial Software Engineer</h2>
-            <a href="#about" class="scroll home-s-btn hor-center"><span class="dot center"></span></a>
+            <!-- The chevron under the headline. Its only content is an empty
+                 span that CSS draws a dot into, so without a label it
+                 announces as a bare link. -->
+            <a href="#about" class="scroll home-s-btn hor-center" aria-label="Scroll to the about section"><span
+                    class="dot center"></span></a>
         </div>
         <div id="credit">
-            <p>Photo by <a href="https://www.mstudiowest.com/" target="_blank">Matthew McFarland</a></p>
+            <p>Photo by <a href="https://www.mstudiowest.com/" target="_blank"
+                           rel="noopener noreferrer">Matthew McFarland</a></p>
         </div>
     </div>
 </section>
@@ -140,41 +229,54 @@
                         <div class="col-sm-6">
                             <ul>
                                 <li>
-                                    <span><i class="fa fa-envelope"></i> Email : </span>
+                                    <span><i class="fa fa-envelope" aria-hidden="true"></i> Email : </span>
                                     <a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a>
                                 </li>
                                 <li>
-                                    <span><i class="fa fa-map-marker"></i> Location : </span>St. Louis, MO
+                                    <span><i class="fa fa-map-marker" aria-hidden="true"></i> Location : </span>St. Louis, MO
                                 </li>
                             </ul>
                         </div>
                         <div class="col-sm-6">
                             <ul>
-                                <li><span><i class="fa fa-phone"></i> Phone : </span><a href="tel:605-270-0565">+1-605-270-0565</a>
+                                <li><span><i class="fa fa-phone" aria-hidden="true"></i> Phone : </span><a href="tel:605-270-0565">+1-605-270-0565</a>
                                 </li>
                             </ul>
                         </div>
                     </div>
 
+                    <!-- Each anchor's only content is a Font Awesome <i>, whose
+                         glyph is a CSS ::before on an empty element and so
+                         contributes no accessible name. aria-label supplies
+                         the name, aria-hidden keeps the Private Use Area
+                         glyph from being announced ahead of it. The Bluesky
+                         links get neither: their <img alt="Bluesky"> already
+                         names them, and adding a label would win over the alt
+                         and leave it dead. -->
                     <ul class="social-list">
-                        <li><a href="https://github.com/GeoBradDev" class="effect" target="_blank"><i
-                                class="fa fa-github"></i></a>
+                        <li><a href="https://github.com/GeoBradDev" class="effect" target="_blank"
+                               rel="noopener noreferrer" aria-label="GitHub"><i
+                                class="fa fa-github" aria-hidden="true"></i></a>
                         </li>
-                        <li><a href="https://www.facebook.com/brad.stricherz/" class="effect" target="_blank"><i
-                                class="fa fa-facebook"></i></a></li>
+                        <li><a href="https://www.facebook.com/brad.stricherz/" class="effect" target="_blank"
+                               rel="noopener noreferrer" aria-label="Facebook"><i
+                                class="fa fa-facebook" aria-hidden="true"></i></a></li>
                         <li>
-                            <a href="https://bsky.app/profile/geobrad.bsky.social" class="effect" target="_blank">
+                            <a href="https://bsky.app/profile/geobrad.bsky.social" class="effect" target="_blank"
+                               rel="noopener noreferrer">
                                 <img src="./img/Bluesky.svg" alt="Bluesky" width="16" height="16">
                             </a>
                         </li>
-                        <li><a href="https://www.youtube.com/stricherz13" class="effect" target="_blank"><i
-                                class="fa fa-youtube"></i></a></li>
-                        <li><a href="https://www.instagram.com/GeoBradDev/" class="effect" target="_blank"><i
-                                class="fa fa-instagram"></i></a>
+                        <li><a href="https://www.youtube.com/stricherz13" class="effect" target="_blank"
+                               rel="noopener noreferrer" aria-label="YouTube"><i
+                                class="fa fa-youtube" aria-hidden="true"></i></a></li>
+                        <li><a href="https://www.instagram.com/GeoBradDev/" class="effect" target="_blank"
+                               rel="noopener noreferrer" aria-label="Instagram"><i
+                                class="fa fa-instagram" aria-hidden="true"></i></a>
                         </li>
                         <li><a href="https://www.linkedin.com/in/brad-stricherz-944999349/" class="effect"
-                               target="_blank"><i
-                                class="fa fa-linkedin"></i></a>
+                               target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><i
+                                class="fa fa-linkedin" aria-hidden="true"></i></a>
                         </li>
                     </ul>
 
@@ -234,7 +336,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service">
                     <div class="service-icon">
-                        <i class="fa fa-globe effect"></i>
+                        <i class="fa fa-globe effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>Web & Mobile GIS Development</h3>
@@ -248,7 +350,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service bordered">
                     <div class="service-icon">
-                        <i class="fa fa-code effect"></i>
+                        <i class="fa fa-code effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>Custom Geoprocessing</h3>
@@ -262,7 +364,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service">
                     <div class="service-icon">
-                        <i class="fa fa-database effect"></i>
+                        <i class="fa fa-database effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>Spatial Databases</h3>
@@ -279,7 +381,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service">
                     <div class="service-icon">
-                        <i class="fa fa-cogs effect"></i>
+                        <i class="fa fa-cogs effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>API Development</h3>
@@ -292,7 +394,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service bordered">
                     <div class="service-icon">
-                        <i class="fa fa-line-chart effect"></i>
+                        <i class="fa fa-line-chart effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>Data Analysis, Visualization & Dashboards</h3>
@@ -309,7 +411,7 @@
             <div class="col-xs-12 col-md-4">
                 <div class="single-service">
                     <div class="service-icon">
-                        <i class="fa fa-heart effect"></i>
+                        <i class="fa fa-heart effect" aria-hidden="true"></i>
                     </div>
                     <div class="service-content">
                         <h3>Custom Solutions for Social Impact</h3>
@@ -349,33 +451,33 @@
                 <div class="col-xs-12 col-sm-4">
                     <div class="contact-item mb-30">
                         <div class="c-icon text-center">
-                            <i class="fa fa-phone"></i>
+                            <i class="fa fa-phone" aria-hidden="true"></i>
                         </div>
                         <div class="c-text">
-                            <h5>PHONE</h5>
-                            <h6><a href="tel:605-270-0565">+1-605-270-0565</a></h6>
+                            <h3>PHONE</h3>
+                            <h4><a href="tel:605-270-0565">+1-605-270-0565</a></h4>
                         </div>
                     </div>
                 </div>
                 <div class="col-xs-12 col-sm-4">
                     <div class="contact-item mb-30">
                         <div class="c-icon text-center">
-                            <i class="fa fa-map-marker"></i>
+                            <i class="fa fa-map-marker" aria-hidden="true"></i>
                         </div>
                         <div class="c-text">
-                            <h5>LOCATION</h5>
-                            <h6>St. Louis, MO</h6>
+                            <h3>LOCATION</h3>
+                            <h4>St. Louis, MO</h4>
                         </div>
                     </div>
                 </div>
                 <div class="col-xs-12 col-sm-4">
                     <div class="contact-item mb-30">
                         <div class="c-icon text-center">
-                            <i class="fa fa-envelope"></i>
+                            <i class="fa fa-envelope" aria-hidden="true"></i>
                         </div>
                         <div class="c-text">
-                            <h5>EMAIL</h5>
-                            <h6><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a></h6>
+                            <h3>EMAIL</h3>
+                            <h4><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a></h4>
                         </div>
                     </div>
                 </div>
@@ -386,14 +488,28 @@
             <div class="col-xs-12 col-md-10 col-md-offset-1">
                 <form id="contact-form" method="post" action="https://formsubmit.co/4b51b0ec8554c5d39e2f423af4b0abb3">
                     <div class="col-sm-6">
+                        <!-- Visually hidden rather than absent. The design has
+                             no room for three labels above three fields, but a
+                             placeholder is a hint, not a name: it disappears
+                             the moment the field has content, which is exactly
+                             when someone tabbing back through a half-filled
+                             form needs to know what the field holds. .sr-only
+                             is Bootstrap 3's, already loaded on this page.
+
+                             The name attributes below are the FormSubmit wire
+                             contract. Renaming one changes or drops a field in
+                             the mail that arrives. -->
+                        <label for="name" class="sr-only">Your name</label>
                         <input type="text" name="name" id="name" class="input-field" required="required"
                                placeholder="Name">
                     </div>
                     <div class="col-sm-6">
+                        <label for="email" class="sr-only">Your email address</label>
                         <input type="email" name="email" id="email" class="input-field" required="required"
                                placeholder="Email">
                     </div>
                     <div class="col-xs-12">
+                        <label for="message" class="sr-only">Your message</label>
                         <textarea name="message" id="message" class="input-field" required="required"
                                   placeholder="Message"></textarea>
                     </div>
@@ -420,26 +536,31 @@
 
             <div class="footer-social">
                 <ul class="footer-social-list">
-                    <li><a class="effect" href="https://github.com/GeoBradDev" target="_blank"><i
-                            class="fa fa-github"></i></a></li>
-                    <li><a class="effect" href="https://www.facebook.com/brad.stricherz/" target="_blank"><i
-                            class="fa fa-facebook"></i></a>
+                    <li><a class="effect" href="https://github.com/GeoBradDev" target="_blank"
+                           rel="noopener noreferrer" aria-label="GitHub"><i
+                            class="fa fa-github" aria-hidden="true"></i></a></li>
+                    <li><a class="effect" href="https://www.facebook.com/brad.stricherz/" target="_blank"
+                           rel="noopener noreferrer" aria-label="Facebook"><i
+                            class="fa fa-facebook" aria-hidden="true"></i></a>
                     </li>
                     <li>
-                        <a class="effect" href="https://bsky.app/profile/geobrad.bsky.social" target="_blank">
+                        <a class="effect" href="https://bsky.app/profile/geobrad.bsky.social" target="_blank"
+                           rel="noopener noreferrer">
                             <img src="./img/Bluesky.svg" alt="Bluesky" width="16" height="16">
                         </a>
                     </li>
 
-                    <li><a class="effect" href="https://www.youtube.com/stricherz13" target="_blank"><i
-                            class="fa fa-youtube"></i></a>
+                    <li><a class="effect" href="https://www.youtube.com/stricherz13" target="_blank"
+                           rel="noopener noreferrer" aria-label="YouTube"><i
+                            class="fa fa-youtube" aria-hidden="true"></i></a>
                     </li>
-                    <li><a class="effect" href="https://www.instagram.com/GeoBradDev/" target="_blank"><i
-                            class="fa fa-instagram"></i></a>
+                    <li><a class="effect" href="https://www.instagram.com/GeoBradDev/" target="_blank"
+                           rel="noopener noreferrer" aria-label="Instagram"><i
+                            class="fa fa-instagram" aria-hidden="true"></i></a>
                     </li>
                     <li><a class="effect" href="https://www.linkedin.com/in/brad-stricherz-944999349/"
-                           target="_blank"><i
-                            class="fa fa-linkedin"></i></a>
+                           target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><i
+                            class="fa fa-linkedin" aria-hidden="true"></i></a>
                     </li>
                 </ul>
             </div>
@@ -451,8 +572,8 @@
 <!-- END FOOTER -->
 
 <!-- Scroll To Top Button -->
-<a href="#" class="scroll-up effect">
-    <i class="fa fa-angle-up"></i>
+<a href="#" class="scroll-up effect" aria-label="Back to top">
+    <i class="fa fa-angle-up" aria-hidden="true"></i>
 </a>
 <!-- End Scroll To Top Button -->
 
@@ -705,7 +826,7 @@
 
 .portfolio-stars {
     background: #f8f9fa;
-    color: #6c757d;
+    color: #5a6268;
     font-size: 11px;
     font-weight: 600;
     padding: 4px 8px;
@@ -720,7 +841,7 @@
 }
 
 .portfolio-description p {
-    color: #6c757d;
+    color: #5a6268;
     font-size: 14px;
     line-height: 1.6;
     margin: 0;
@@ -768,7 +889,7 @@
 
 .portfolio-link-code {
     background: transparent;
-    color: #6c757d;
+    color: #5a6268;
     border-color: #dee2e6;
 }
 
@@ -901,7 +1022,7 @@
 .portfolio-loading {
     text-align: center;
     padding: 40px;
-    color: #6c757d;
+    color: #5a6268;
 }
 
 .portfolio-loading::after {

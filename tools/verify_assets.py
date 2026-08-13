@@ -62,6 +62,10 @@ SHIPPED_VARIANTS = [
     "img/cesium-120.webp",
     "img/cesium-120.png",
     "img/qr_code-240.png",
+    # Never fetched by the page itself, only by link unfurlers, so it is not
+    # in HOMEPAGE_ASSETS below. It is still an asset the markup names, and a
+    # deleted or renamed one would 404 in every share.
+    "img/og-card.jpg",
 ]
 
 # What a first-paint mobile visit to index.html actually pulls down. The 1920 and
@@ -96,6 +100,22 @@ def size(path):
     return os.path.getsize(path) if os.path.exists(path) else 0
 
 
+def without_comments(source, style):
+    """Strip comments so a scan reads code, not prose about code.
+
+    Same helper, and the same reason, as verify_content.without_comments. The
+    scans below assert that no page references a deleted asset and that every
+    shipped <img> carries dimensions. A comment explaining either rule has to
+    quote the thing it is about, and a bare substring scan counts that
+    explanation as the offense it documents: a comment in index.html reading
+    'their <img alt="Bluesky"> already names them' was reported as an <img>
+    with no width or height. Strip comments first so the files can keep their
+    explanations.
+    """
+    pattern = r"/\*.*?\*/" if style == "css" else r"<!--.*?-->"
+    return re.sub(pattern, "", source, flags=re.S)
+
+
 def main():
     print("Dead assets removed")
     for path in DEAD_ASSETS:
@@ -126,17 +146,17 @@ def main():
 
     print("\nNo dead references in markup or CSS")
     for page in HTML_PAGES:
-        body = open(page, encoding="utf-8").read()
+        body = without_comments(open(page, encoding="utf-8").read(), "html")
         for path in DEAD_ASSETS:
             name = os.path.basename(path)
             check(name not in body, "%s does not reference %s" % (page, name))
-    css = open("css/style.css", encoding="utf-8").read()
+    css = without_comments(open("css/style.css", encoding="utf-8").read(), "css")
     for name in DEAD_CSS_REFERENCES:
         check(name not in css, "css/style.css does not reference %s" % name)
 
     print("\nEvery img has explicit width and height")
     for page in HTML_PAGES:
-        body = open(page, encoding="utf-8").read()
+        body = without_comments(open(page, encoding="utf-8").read(), "html")
         tags = re.findall(r"<img\b[^>]*>", body)
         if not tags:
             print("  skip  %s has no <img>" % page)
