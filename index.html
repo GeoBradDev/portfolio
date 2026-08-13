@@ -10,6 +10,12 @@
     <title>Brad Stricherz | Geospatial Software Engineer</title>
     <meta name="description" content="Brad Stricherz builds open-source mapping and spatial analysis tools for nonprofits, researchers, and community organizers. React, Django, PostGIS, and CesiumJS.">
 
+    <!-- The site answers on both geobrad.dev and www.geobrad.dev. Without this
+         those are two URLs for one page and ranking signals split between
+         them. tools/verify_seo_a11y.py reads the host from CNAME, so changing
+         the custom domain fails the gate until this agrees. -->
+    <link rel="canonical" href="https://www.geobrad.dev/">
+
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
 
