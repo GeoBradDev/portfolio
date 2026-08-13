@@ -29,6 +29,7 @@ for you, which is the accepted cost of having no CI in this repository.
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -58,10 +59,23 @@ ACCOUNTS = [
 # reworded.
 PORTFOLIO_TOPIC = "portfolio"
 
-API = "https://api.github.com/users/%s/repos?per_page=100&sort=updated"
+API = "https://api.github.com/users/%s/repos?per_page=%d&sort=updated&page=%d"
+PAGE_SIZE = 100
+# A backstop, not a limit anyone is near: the largest account here has 25
+# repos. It exists so a paging bug loops a bounded number of times instead of
+# forever.
+MAX_PAGES = 10
 USER_AGENT = "geobrad.dev-build-projects"
 FETCH_TIMEOUT = 30
 PROBE_TIMEOUT = 15
+
+# Codepoint ranges that carry pictographs. Repo descriptions are free text
+# typed into a box on github.com, and they land on the page verbatim, so an
+# emoji in one would ship. verify_portfolio.py fails the gate on it; main()
+# warns here, where whoever runs the script can still go fix the description.
+EMOJI_RANGES = re.compile(
+    "[\u2600-\u27bf\u2b00-\u2bff\ufe0f\U0001f000-\U0001faff]"
+)
 
 
 def https_url(value):
@@ -158,7 +172,14 @@ def to_project(repo, demo):
     }
 
 
-def request(url):
+def github_request(url):
+    """A request to api.github.com, carrying the token when one is set.
+
+    Never use this for anything but api.github.com. urllib's redirect handler
+    copies every header except content-length and content-type onto the
+    redirect target, so a request built here that follows a redirect to
+    another host hands that host the Authorization header.
+    """
     headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"}
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if token:
@@ -167,22 +188,48 @@ def request(url):
 
 
 def fetch_repos(account):
-    with urllib.request.urlopen(request(API % account),
-                                timeout=FETCH_TIMEOUT) as response:
-        data = json.loads(response.read().decode("utf-8"))
-    if not isinstance(data, list):
-        raise RuntimeError("expected a list of repos, got %s" % type(data).__name__)
-    return data
+    """Every public repo on the account, following pagination to the end.
+
+    Reading only the first page would drop a portfolio repo silently once an
+    account passes PAGE_SIZE repos, and sort=updated means the first to fall
+    off is the least recently touched, which is exactly the long-lived project
+    least likely to be noticed missing.
+    """
+    repos = []
+    for page in range(1, MAX_PAGES + 1):
+        url = API % (account, PAGE_SIZE, page)
+        with urllib.request.urlopen(github_request(url),
+                                    timeout=FETCH_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        if not isinstance(data, list):
+            raise RuntimeError("expected a list of repos, got %s" % type(data).__name__)
+        repos.extend(data)
+        if len(data) < PAGE_SIZE:
+            return repos
+    raise RuntimeError(
+        "%s has more than %d repos; raise MAX_PAGES rather than shipping a "
+        "silently truncated list" % (account, PAGE_SIZE * MAX_PAGES)
+    )
 
 
 def probe(url):
     """True when the URL answers below 400.
 
-    GET rather than HEAD: enough hosts answer HEAD with 405 that a HEAD probe
-    would drop demos that are perfectly alive.
+    Deliberately not built with github_request. This URL is whatever a repo
+    owner typed into the homepage box, it can redirect anywhere, and urllib
+    copies headers across a redirect, so a token attached here would be handed
+    to a third-party host in plaintext. Nothing but a User-Agent goes out.
+
+    Not the Accept header either: a host doing strict content negotiation
+    answers application/vnd.github+json with a 406, which would read as dead
+    and silently drop a Live Demo link from a site that is perfectly up.
+
+    GET rather than HEAD, because enough hosts answer HEAD with 405 that a
+    HEAD probe would drop demos that are alive for the same reason.
     """
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request(url), timeout=PROBE_TIMEOUT) as response:
+        with urllib.request.urlopen(request, timeout=PROBE_TIMEOUT) as response:
             return response.status < 400
     except urllib.error.HTTPError as error:
         return error.code < 400
@@ -224,6 +271,17 @@ def main():
         if "#portfolio" in (repo.get("description") or "").lower():
             print("  WARN  %s description still carries the #portfolio flag"
                   % repo.get("name"), file=sys.stderr)
+        # Warned here rather than only failed in verify_portfolio.py, because
+        # the fix is on github.com and this is the moment someone is looking.
+        # A pictograph found only at gate time leaves the maintainer with a
+        # red check and no idea which description to go edit.
+        pictographs = sorted(set(EMOJI_RANGES.findall(repo.get("description") or "")))
+        if pictographs:
+            print("  WARN  %s description contains %s, which will fail the gate; "
+                  "edit it on github.com and re-run"
+                  % (repo.get("name"),
+                     ", ".join("U+%04X" % ord(c) for c in pictographs)),
+                  file=sys.stderr)
         projects.append(to_project(repo, demo))
 
     payload = {

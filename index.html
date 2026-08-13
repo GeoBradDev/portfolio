@@ -675,8 +675,10 @@
                 const starIcon = el("i", "fa fa-star");
                 starIcon.setAttribute("aria-hidden", "true");
                 stars.appendChild(starIcon);
-                stars.appendChild(document.createTextNode(" " + repo.stars));
-                stars.appendChild(el("span", "sr-only", " GitHub stars"));
+                const starCount = repo.stars || 0;
+                stars.appendChild(document.createTextNode(" " + starCount));
+                stars.appendChild(el("span", "sr-only",
+                    starCount === 1 ? " GitHub star" : " GitHub stars"));
                 meta.appendChild(stars);
                 header.appendChild(meta);
                 content.appendChild(header);

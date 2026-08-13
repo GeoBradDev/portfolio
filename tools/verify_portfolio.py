@@ -105,9 +105,20 @@ def without_comments(source, style):
     """Strip comments so a scan reads code, not prose about code.
 
     Same helper, and the same reason, as verify_assets.without_comments: a
-    comment has to quote the thing it explains, and the comment in index.html
-    saying why the renderer no longer calls api.github.com contains the string
-    "api.github.com".
+    comment has to quote the thing it explains, and a bare substring scan
+    counts that explanation as the offense it documents.
+
+    It strips HTML comments and CSS comments, and deliberately not JavaScript
+    line comments. A `//`-stripping regex cannot tell `// note` from the `//`
+    inside `https://example.com`, and getting that wrong deletes real code
+    from the text being scanned, which turns a FAIL into a silent PASS. A
+    false PASS in a verifier is worse than a false FAIL.
+
+    The consequence is a live constraint on the inline script in index.html:
+    a `//` comment there must not contain the literal strings this file scans
+    for, "api.github.com", "portfolioCSS", or "insertAdjacentHTML". The
+    comment explaining why the renderer no longer calls the API says "the
+    GitHub API" rather than the hostname for exactly this reason.
     """
     pattern = r"/\*.*?\*/" if style == "css" else r"<!--.*?-->"
     return re.sub(pattern, "", source, flags=re.S)
