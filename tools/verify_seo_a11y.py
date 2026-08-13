@@ -404,6 +404,88 @@ def check_homepage_carries_share_tags():
         )
 
 
+def json_ld_blocks(source):
+    """Every <script type="application/ld+json"> body on the page, parsed.
+
+    Returns a list of (raw, parsed) pairs, with parsed set to None when the
+    block is not valid JSON, so the caller can report a broken block rather
+    than raising on it.
+    """
+    blocks = []
+    pattern = re.compile(
+        r'<script\b[^>]*\btype\s*=\s*"application/ld\+json"[^>]*>(.*?)</script>',
+        re.S | re.I,
+    )
+    for body in pattern.findall(source):
+        try:
+            blocks.append((body, json.loads(body)))
+        except ValueError:
+            blocks.append((body, None))
+    return blocks
+
+
+def check_homepage_has_person_structured_data():
+    """Structured data has to describe what the page actually says.
+
+    Google's guidelines are explicit that structured data must represent
+    page content, so every field below is something a visitor can read on
+    index.html: the name and title from the hero, the location and email
+    from the contact block, the degree from the About copy, and the sameAs
+    profiles from the two social lists. The employer named on resume.html is
+    deliberately absent, because index.html never mentions it.
+    """
+    print("\nThe homepage carries Person structured data")
+
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
+
+    host = site_host()
+    if not check(host is not None, "CNAME names the site host"):
+        return
+
+    blocks = json_ld_blocks(source)
+    if not check(bool(blocks), "index.html carries a JSON-LD block"):
+        return
+
+    for raw, parsed in blocks:
+        check(parsed is not None, "index.html's JSON-LD parses as JSON")
+
+    people = [
+        parsed
+        for _, parsed in blocks
+        if isinstance(parsed, dict) and parsed.get("@type") == "Person"
+    ]
+    if not check(bool(people), "index.html declares a Person"):
+        return
+
+    person = people[0]
+    check(
+        person.get("@context") == "https://schema.org",
+        "the Person names the schema.org context",
+    )
+    check(person.get("name", "").strip() != "", "the Person has a name")
+    check(person.get("jobTitle", "").strip() != "", "the Person has a jobTitle")
+    check(
+        person.get("url") == "https://%s/" % host,
+        "the Person's url is this site (%s)" % person.get("url"),
+    )
+
+    same_as = person.get("sameAs")
+    check(
+        isinstance(same_as, list) and len(same_as) >= 2,
+        "the Person lists at least two sameAs profiles",
+    )
+    for url in same_as if isinstance(same_as, list) else []:
+        check(
+            isinstance(url, str) and url.startswith("https://"),
+            "sameAs entry is an https URL (%s)" % url,
+        )
+        # A profile in sameAs that the page does not link is a claim nobody
+        # can check, and one the page drops later goes stale silently.
+        check(url in source, "sameAs entry is also linked from the page (%s)" % url)
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -411,6 +493,7 @@ def main():
     check_indexing_policy_is_explicit()
     check_share_card_exists_and_fits()
     check_homepage_carries_share_tags()
+    check_homepage_has_person_structured_data()
 
     print()
     if failures:

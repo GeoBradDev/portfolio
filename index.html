@@ -36,6 +36,54 @@
     <meta property="og:image:alt" content="Brad Stricherz, Geospatial Software Engineer, over a photo of a wing foiler on open water">
     <meta name="twitter:card" content="summary_large_image">
 
+    <!-- Every field here is something the page itself states: the name and
+         title from the hero, the email, phone, and location from the contact
+         block, the degree from the About copy, and the profiles from the
+         social lists. Structured data that outruns the page is what Google's
+         guidelines call out, and it is also what goes stale first, which is
+         why the employer named on resume.html is absent: index.html never
+         mentions it.
+
+         verify_security.py routes this block to a JSON parser rather than to
+         node --check, because node reads the first colon as a syntax error. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Brad Stricherz",
+      "url": "https://www.geobrad.dev/",
+      "image": "https://www.geobrad.dev/img/portrait-340.jpg",
+      "jobTitle": "Geospatial Software Engineer",
+      "email": "mailto:Brad@GeoBrad.dev",
+      "telephone": "+1-605-270-0565",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "St. Louis",
+        "addressRegion": "MO",
+        "addressCountry": "US"
+      },
+      "alumniOf": {
+        "@type": "CollegeOrUniversity",
+        "name": "Pennsylvania State University"
+      },
+      "knowsAbout": [
+        "Geographic Information Systems",
+        "Spatial Data Science",
+        "WebGIS",
+        "PostGIS",
+        "CesiumJS"
+      ],
+      "sameAs": [
+        "https://github.com/GeoBradDev",
+        "https://www.linkedin.com/in/brad-stricherz-944999349/",
+        "https://bsky.app/profile/geobrad.bsky.social",
+        "https://www.youtube.com/stricherz13",
+        "https://www.instagram.com/GeoBradDev/",
+        "https://www.facebook.com/brad.stricherz/"
+      ]
+    }
+    </script>
+
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
 

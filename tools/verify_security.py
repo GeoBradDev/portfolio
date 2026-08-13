@@ -12,6 +12,7 @@ Source-level only. That the escaped card actually renders, and that a hostile
 homepage URL is actually refused at runtime, has to be driven in a browser.
 """
 
+import json
 import re
 import shutil
 import subprocess
@@ -310,12 +311,15 @@ def check_inline_script_syntax():
     tag without a src attribute regardless of what other attributes it
     carries, and check it. node is a convenience here, never a project
     dependency.
+
+    A script tag whose type is a data type is checked by a parser that
+    matches what it holds, not by node. See below.
     """
     print("\nInline scripts parse")
 
-    if shutil.which("node") is None:
-        print("  skip  node not found, cannot syntax-check inline scripts")
-        return
+    have_node = shutil.which("node") is not None
+    if not have_node:
+        print("  skip  node not found, JavaScript blocks go unchecked")
 
     # <script\s*> only matched an attribute-less tag, so <script type="module">
     # or <script defer> got no gate at all, and silently: a plain <script>
@@ -323,7 +327,16 @@ def check_inline_script_syntax():
     # script to check" assertion below. Match any script tag without a src
     # attribute instead; a tag WITH src loads external code that this check
     # is not meant to see.
-    inline = re.compile(r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", re.S)
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script>", re.S)
+
+    # A script tag whose type is a data type holds data, not JavaScript.
+    # node --check rejects a JSON-LD block outright, reading the first colon
+    # as "SyntaxError: Unexpected token ':'", so routing it to node would
+    # make structured data impossible to ship. It still gets gated, just by
+    # the parser that matches what it is: a malformed JSON-LD block is
+    # invisible to a search engine, and worth catching here exactly as a
+    # syntax error in the renderer is.
+    data_type = re.compile(r'\btype\s*=\s*"(application/(?:ld\+)?json)"', re.I)
 
     # Iterating (INDEX, RESUME) exempted any page added later, which is the
     # same silent-exemption bug the HTML_PAGES glob was introduced to fix for
@@ -332,21 +345,43 @@ def check_inline_script_syntax():
         source = read_or_fail(path)
         if source is None:
             continue
-        blocks = inline.findall(source)
+        blocks = [
+            (data_type.search(attrs), body) for attrs, body in tagged.findall(source)
+        ]
         name = path.relative_to(ROOT)
 
         # index.html and resume.html are expected to carry inline script, so
         # finding none there means the extraction pattern broke rather than
         # that the script is gone. A page that legitimately has none,
         # thanks.html or the Termly privacy paste, must not fail for that.
+        # A JSON-LD block is not script and does not satisfy this.
         if path in (INDEX, RESUME):
-            if not check(bool(blocks), "%s has an inline script to check" % name):
+            script_blocks = [body for kind, body in blocks if kind is None]
+            if not check(bool(script_blocks), "%s has an inline script to check" % name):
                 continue
         elif not blocks:
             print("  skip  %s has no inline script" % name)
             continue
 
-        for number, body in enumerate(blocks, start=1):
+        for number, (kind, body) in enumerate(blocks, start=1):
+            if kind is not None:
+                try:
+                    json.loads(body)
+                except ValueError as error:
+                    fail(
+                        "%s inline %s block %d is not valid JSON: %s"
+                        % (name, kind.group(1), number, error)
+                    )
+                else:
+                    print(
+                        "  PASS  %s inline %s block %d parses"
+                        % (name, kind.group(1), number)
+                    )
+                continue
+
+            if not have_node:
+                continue
+
             with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8") as handle:
                 handle.write(body)
                 handle.flush()
