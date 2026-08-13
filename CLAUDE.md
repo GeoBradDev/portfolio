@@ -207,16 +207,35 @@ python3 tools/verify_security.py
 Exits 0 when the issue #17 acceptance criteria still hold: jQuery is at or above 3.5, the
 version in the file matches the one named in this document, no GitHub API field is interpolated
 into a template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an
-`href` or `window.open`, no page or stylesheet requests an `http://` asset, no IE conditional
-shim survives, and Font Awesome is one local major site-wide. Standard library only. Run it
-after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled library.
+`href`, `window.open`, or `setAttribute`, no page or stylesheet requests an `http://` asset, no
+IE conditional shim survives, and Font Awesome is one local major site-wide. Standard library
+only. Run it after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled
+library.
 
-It also runs `node --check` over every inline `<script>` in `index.html` and `resume.html`, the
-way `verify_interactivity.py` does for `js/main.js`. The gated inline `<script>` in `index.html`
-runs 466 lines total; about 301 of those are an embedded CSS-as-a-string block injected via
-`insertAdjacentHTML`, leaving roughly 165 lines of actual portfolio-renderer JavaScript, and
-before this it had no syntax gate at all. `node` is a convenience, skipped when absent, never a
-project dependency.
+The pages it scans are discovered with a glob over `*.html` at the repo root, not a hardcoded
+list, so a new page is covered the moment it is added rather than being silently exempt. Two
+consequences worth knowing: a missing file is reported as a FAIL and the remaining checks still
+run, rather than dying on a traceback partway through; and `privacy.html` is swept even though
+it is a vendor-generated Termly document nobody hand-authored, so a regenerated paste containing
+an `http://` link would fail the gate with no exclusion mechanism.
+
+It also runs `node --check` over every inline `<script>` on those pages, the way
+`verify_interactivity.py` does for `js/main.js`. Any script tag without a `src` is gated,
+including `type="module"` and `defer`; only external `src` tags are skipped. The gated inline
+`<script>` in `index.html` runs 466 lines total; about 301 of those are an embedded
+CSS-as-a-string block injected via `insertAdjacentHTML`, leaving roughly 165 lines of actual
+portfolio-renderer JavaScript, and before this it had no syntax gate at all. `node` is a
+convenience, skipped when absent, never a project dependency.
+
+Do not mistake the interpolation checks for a general XSS gate. They catch a template literal
+written literally at an `innerHTML`/`outerHTML` assignment or an `insertAdjacentHTML` call, and
+that is all. Assigning the literal to a variable first, string concatenation, `innerHTML +=`,
+`document.write`, `createContextualFragment`, and jQuery's `.html()` and `.append()` all walk
+straight past it, and jQuery is loaded on `index.html`. The actual defense is that the renderer
+builds DOM nodes and sets `textContent`; the checks only stop that defense from being quietly
+undone. They are also blunt in the other direction: any interpolation at those sites fails,
+including a safe `${escapeHtml(x)}`, so introducing an escaping helper means changing the rule
+first.
 
 ### Regenerating optimized images
 
