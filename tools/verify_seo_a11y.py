@@ -277,11 +277,140 @@ def check_indexing_policy_is_explicit():
             )
 
 
+# The share card, and the budget it has to fit. Twitter's limit is 5 MB and
+# Facebook's is 8 MB, so 200 KB is not a platform limit; it is the issue's
+# own budget, set because a card nobody waits for is a card nobody sees.
+OG_CARD = ROOT / "img" / "og-card.jpg"
+OG_CARD_BUDGET = 200 * 1024
+OG_CARD_SIZE = (1200, 630)
+
+
+def jpeg_dimensions(path):
+    """(width, height) of a JPEG, read from its SOF marker.
+
+    Pillow would answer this in one line, but every verifier in this repo is
+    standard library only so that the gate runs anywhere Python 3 does. A
+    JPEG is a chain of length-prefixed segments; the frame header (any SOFn
+    except the three that are not frame headers) carries height then width as
+    big-endian 16-bit values right after a one-byte sample precision.
+    """
+    data = path.read_bytes()
+    if data[:2] != b"\xff\xd8":
+        return None
+    offset = 2
+    while offset + 9 < len(data):
+        if data[offset] != 0xFF:
+            return None
+        marker = data[offset + 1]
+        # Standalone markers carry no length payload.
+        if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
+            offset += 2
+            continue
+        length = int.from_bytes(data[offset + 2:offset + 4], "big")
+        # SOF0 through SOF15, excluding DHT (C4), JPG (C8), and DAC (CC).
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            height = int.from_bytes(data[offset + 5:offset + 7], "big")
+            width = int.from_bytes(data[offset + 7:offset + 9], "big")
+            return (width, height)
+        offset += 2 + length
+    return None
+
+
+def check_share_card_exists_and_fits():
+    """A card that 404s or crawls slowly is the same as no card.
+
+    Dimensions are asserted, not assumed. 1200x630 is the size every unfurler
+    treats as a large summary card; off by enough and Twitter and LinkedIn
+    fall back to a small thumbnail or drop the image entirely.
+    """
+    print("\nThe share card exists, is the right size, and fits its budget")
+
+    if not check(OG_CARD.exists(), "img/og-card.jpg exists"):
+        return
+
+    size = OG_CARD.stat().st_size
+    check(
+        size < OG_CARD_BUDGET,
+        "img/og-card.jpg is %.1f KB, under the %d KB budget"
+        % (size / 1024.0, OG_CARD_BUDGET // 1024),
+    )
+
+    dimensions = jpeg_dimensions(OG_CARD)
+    check(
+        dimensions == OG_CARD_SIZE,
+        "img/og-card.jpg is %dx%d (found %s)"
+        % (OG_CARD_SIZE[0], OG_CARD_SIZE[1], dimensions),
+    )
+
+
+def check_homepage_carries_share_tags():
+    """A bare URL in Slack or LinkedIn is a wasted introduction.
+
+    Only index.html carries these. The other pages are noindex and unlinked,
+    and a card on a page nobody is meant to share is markup that can only
+    ever go stale.
+
+    og:image has to be absolute. A relative one resolves against the
+    crawler's own base, not the page's, and the image silently never loads.
+    """
+    print("\nThe homepage carries Open Graph and Twitter card tags")
+
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
+
+    host = site_host()
+    if not check(host is not None, "CNAME names the site host"):
+        return
+
+    required = {
+        "og:type": "website",
+        "og:site_name": None,
+        "og:title": None,
+        "og:description": None,
+        "og:url": "https://%s/" % host,
+        "og:image": "https://%s/img/og-card.jpg" % host,
+        "og:image:width": "1200",
+        "og:image:height": "630",
+        "og:image:alt": None,
+    }
+    for prop, expected in required.items():
+        content = meta_content(source, property=prop)
+        if not check(content is not None, "index.html declares %s" % prop):
+            continue
+        if expected is None:
+            check(content.strip() != "", "%s is not empty" % prop)
+        else:
+            check(content == expected, "%s is %s (found %s)" % (prop, expected, content))
+
+    card = meta_content(source, name="twitter:card")
+    check(
+        card == "summary_large_image",
+        "index.html sets twitter:card to summary_large_image",
+    )
+
+    # The pages that are not meant to be shared must not carry a card that
+    # would rot. This is the check that keeps a future copy-paste of the
+    # homepage head from spreading stale og:url values across the site.
+    for path in HTML_PAGES:
+        if path == INDEX:
+            continue
+        other = read(path)
+        if other is None:
+            continue
+        check(
+            meta_content(other, property="og:url") is None,
+            "%s carries no og:url to go stale" % path.name,
+        )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
     check_every_page_declares_a_canonical()
     check_indexing_policy_is_explicit()
+    check_share_card_exists_and_fits()
+    check_homepage_carries_share_tags()
 
     print()
     if failures:

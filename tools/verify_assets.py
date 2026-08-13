@@ -62,6 +62,10 @@ SHIPPED_VARIANTS = [
     "img/cesium-120.webp",
     "img/cesium-120.png",
     "img/qr_code-240.png",
+    # Never fetched by the page itself, only by link unfurlers, so it is not
+    # in HOMEPAGE_ASSETS below. It is still an asset the markup names, and a
+    # deleted or renamed one would 404 in every share.
+    "img/og-card.jpg",
 ]
 
 # What a first-paint mobile visit to index.html actually pulls down. The 1920 and
