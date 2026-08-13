@@ -132,6 +132,31 @@ when GitHub supplies nothing, so the renderer's `||` fallbacks stay simple. `gen
 exists because staleness is the one real cost of the hand-run choice, and a reader
 should be able to see how stale the file is without checking git.
 
+## Deviation taken during Task 3: sort on `pushed_at`, not `updated_at`
+
+The plan below says the field is `updated`, carrying `updated_at`, and that the sort key
+is the same. Task 2 disproved that within the hour.
+
+`updated_at` bumps on **any** repo metadata change, a description edit included.
+Stripping the `#portfolio` flag from seven descriptions reset all seven `updated_at`
+values to the same minute, and the resulting order was whichever sequence the PATCH calls
+happened to complete in: `QuakeGlobe`, 0 stars and last pushed in May 2025, sorted above
+`WebGIS-Django`, 6 stars and the most-starred repo in the set.
+
+`pushed_at` moves only on a real push, which is what "most recently worked on" was always
+trying to mean, and it survived Task 2 untouched. So:
+
+- `to_project` emits `"pushed"` carrying `pushed_at`, not `"updated"` carrying `updated_at`.
+- `main` sorts on `pushed_at` descending.
+- `verify_portfolio.check_projects_json_is_well_formed` gained two checks: every project
+  records a `pushed` timestamp, and the list is in descending `pushed` order. The file's
+  order is the display order, since the renderer appends in read order and re-sorts
+  nothing, so asserting it makes ordering a property of the data rather than an accident.
+
+This also softens the issue's finding 7, which complains that a README typo can push a
+minor project above your best work. It does not solve it; a real commit still reorders.
+The owner declined a `featured` topic, so that is the accepted behavior.
+
 ---
 
 ### Task 1: Pin the acceptance criteria in a sixth verifier

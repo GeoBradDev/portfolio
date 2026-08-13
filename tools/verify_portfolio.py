@@ -225,6 +225,24 @@ def check_projects_json_is_well_formed():
             demo is None or (isinstance(demo, str) and demo.startswith("https://")),
             "%s demo link is https or absent, never anything else" % label,
         )
+        check(
+            isinstance(project.get("pushed"), str) and project["pushed"].endswith("Z"),
+            "%s records when it was last pushed to" % label,
+        )
+
+    # The file's order is the display order: the renderer appends cards in the
+    # order it reads them and re-sorts nothing. Asserting it here is what makes
+    # the ordering a property of the data rather than an accident of whichever
+    # sequence the generator's requests happened to complete in.
+    #
+    # pushed rather than updated on purpose. updated_at bumps on any metadata
+    # change, so editing seven descriptions flattens seven repos to the same
+    # minute and destroys the order; pushed_at moves only on a real push.
+    stamps = [p.get("pushed") for p in projects if isinstance(p, dict)]
+    check(
+        stamps == sorted(stamps, reverse=True),
+        "projects are ordered by last push, newest first",
+    )
 
 
 def check_no_magic_word_in_descriptions():
