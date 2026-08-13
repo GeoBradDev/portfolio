@@ -94,7 +94,64 @@ h6 {
 a, a:focus, a:hover, a:active {
     text-decoration: none;
     color: inherit;
-    outline: none;
+}
+
+/* This rule used to read `outline: none` on the selector above, which took
+   the focus ring off every link on the site and left keyboard users with no
+   way to tell where they were. :focus-visible is what the browser uses to
+   mean "focused, and the user is navigating by keyboard", so the ring comes
+   back for them without appearing on every mouse click, which is the thing
+   the blanket suppression was reaching for. 2px at 3px offset is what
+   thanks.html already uses on its .back-btn. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: 2px solid #232323;
+    outline-offset: 3px;
+}
+
+/* Over the hero photo and the dark footer, a #232323 outline disappears into
+   the background. The same ring in white does not. */
+.home-1 a:focus-visible,
+.footer a:focus-visible,
+.nav-wrapper a:focus-visible {
+    outline-color: #fff;
+}
+
+/* Parked above the viewport until focused, then pinned to the top left. The
+   fill is the inverse of .submit-btn, white on the site's near-black rather
+   than the other way round, because at scroll top this lands over the hero
+   photo and the transparent nav, where a light panel carries further than a
+   dark one. z-index has to beat .nav-wrapper at 20 and .loader-con at 99, or
+   the link takes focus behind one of them and the user sees nothing. */
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 12px;
+    z-index: 200;
+    padding: 10px 18px;
+    border: 2px solid #232323;
+    background-color: #fff;
+    color: #232323;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    transition: top .2s ease-in-out;
+}
+
+/* :focus, not :focus-visible. The link is invisible until it takes focus, so
+   there is no mouse-click case to suppress: it cannot be clicked before it
+   is shown. */
+.skip-link:focus {
+    top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skip-link {
+        transition: none;
+    }
 }
 
 ul, ol {
@@ -1125,7 +1182,6 @@ Contact
     padding: 8px 16px;
     color: #232323;
     border: 1px solid #ddd;
-    outline: none;
 }
 
 textarea.input-field {
@@ -1153,7 +1209,6 @@ textarea.input-field {
     font-size: 16px;
     font-weight: 700;
     border: 2px solid #333;
-    outline: none;
     background-color: #333;
     color: #fafafa;
     cursor: pointer;

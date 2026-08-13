@@ -117,6 +117,12 @@
 </head>
 <body>
 
+<!-- First focusable element in the document on purpose. Without it a keyboard
+     user tabs the whole nav on every page load before reaching any content.
+     It targets #about rather than #home because the hero holds no content to
+     read, only the headline and the chevron. -->
+<a class="skip-link" href="#about">Skip to content</a>
+
 <!-- Loader -->
 <div class="loader-con">
     <div class="spinner center">

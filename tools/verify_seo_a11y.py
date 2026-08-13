@@ -732,6 +732,75 @@ def check_form_controls_are_labelled():
         )
 
 
+def check_skip_link_and_focus_visibility():
+    """A skip link nobody can see is a skip link nobody can use.
+
+    Two halves of one problem. The skip link has to be the first focusable
+    thing in the document, or a keyboard user tabs through the whole nav
+    before reaching the control that exists to let them skip the nav. And
+    the stylesheet suppressed the focus ring site-wide, so even once the
+    link took focus there was nothing on screen to say so.
+
+    :focus-visible rather than :focus on purpose. A mouse click on a link
+    also focuses it, and an outline that appears on every click reads as a
+    rendering bug, which is what led to outline: none in the first place.
+    """
+    print("\nThe skip link is first, and focus is visible")
+
+    source = read_or_fail(INDEX)
+    css = read_or_fail(STYLE_CSS)
+    if source is None or css is None:
+        return
+
+    body = re.search(r"<body[^>]*>(.*)</body>", source, re.S | re.I)
+    if not check(body is not None, "index.html has a body"):
+        return
+
+    first = re.search(
+        r"<(?:a\b[^>]*\bhref|button|input|select|textarea)\b[^>]*>",
+        body.group(1),
+        re.I,
+    )
+    if not check(first is not None, "index.html has a focusable element"):
+        return
+    check(
+        "skip-link" in first.group(0),
+        "the first focusable element is the skip link (found %s)"
+        % " ".join(first.group(0).split())[:60],
+    )
+
+    target = re.search(r'class="skip-link"[^>]*href="#([^"]+)"', source)
+    if not target:
+        target = re.search(r'href="#([^"]+)"[^>]*class="skip-link"', source)
+    if check(target is not None, "the skip link targets a fragment"):
+        check(
+            re.search(r'id="%s"' % re.escape(target.group(1)), source) is not None,
+            "the skip link's target #%s exists on the page" % target.group(1),
+        )
+
+    check(
+        re.search(r"(?m)^\.skip-link\s*\{", css) is not None,
+        "css/style.css styles .skip-link",
+    )
+    check(
+        re.search(r"\.skip-link:focus", css) is not None,
+        "css/style.css reveals .skip-link on focus",
+    )
+
+    # The blanket suppression, and its replacement. Matching the selector
+    # list as written rather than any outline: none anywhere, because a
+    # focus-visible rule is allowed to set outline on some other element.
+    check(
+        re.search(r"(?m)^a,\s*a:focus[^{]*\{[^}]*outline\s*:\s*none", css, re.S) is None,
+        "css/style.css no longer strips the focus outline from every link",
+    )
+    check(
+        css.count(":focus-visible") >= 3,
+        "css/style.css declares :focus-visible outlines (found %d)"
+        % css.count(":focus-visible"),
+    )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -744,6 +813,7 @@ def main():
     check_interactive_elements_have_names()
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
+    check_skip_link_and_focus_visibility()
 
     print()
     if failures:
