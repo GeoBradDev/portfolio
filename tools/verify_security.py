@@ -27,6 +27,14 @@ STYLE_CSS = ROOT / "css" / "style.css"
 JQUERY = ROOT / "js" / "jquery.min.js"
 CLAUDE_MD = ROOT / "CLAUDE.md"
 
+# Every page at the repo root, discovered once from the filesystem instead of
+# hardcoded per check. check_no_plain_http_assets and
+# check_font_awesome_is_single_local_version used to each list the pages by
+# hand, which meant a page added after those lists were written was silently
+# exempt from both scans. The named constants above stay, for the checks that
+# mean one specific file by name rather than "every page".
+HTML_PAGES = sorted(ROOT.glob("*.html"))
+
 # jQuery below this is affected by CVE-2020-11022, CVE-2020-11023 (XSS via
 # .html()/.append(), fixed in 3.5.0) and CVE-2019-11358 (prototype pollution
 # via $.extend(true, ...), fixed in 3.4.0).
@@ -50,7 +58,24 @@ def check(condition, message):
 
 
 def read(path):
+    """Return path's text, or None if the file does not exist.
+
+    A file this script scans can be renamed or deleted without this script
+    changing. Returning None instead of letting read_text() raise means the
+    caller decides how to report that, instead of the whole run dying with a
+    traceback partway through and every remaining check silently never
+    running.
+    """
+    if not path.exists():
+        return None
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def read_or_fail(path):
+    """read(), plus turning a missing file into one FAIL line instead of None."""
+    text = read(path)
+    check(text is not None, "%s exists" % path.relative_to(ROOT))
+    return text
 
 
 def check_jquery_version():
@@ -74,7 +99,9 @@ def check_jquery_version():
 
     # CLAUDE.md claimed 3.x while 2.2.4 shipped for two years. Assert the
     # documented version against the file so the claim cannot drift again.
-    doc = read(CLAUDE_MD)
+    doc = read_or_fail(CLAUDE_MD)
+    if doc is None:
+        return
     check(
         version in doc,
         "CLAUDE.md names the shipped jQuery version (%s)" % version,
@@ -84,7 +111,9 @@ def check_jquery_version():
 def check_no_unescaped_interpolation():
     print("\nNo remote GitHub data reaches innerHTML")
 
-    source = read(INDEX)
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
 
     # Every repo field the GitHub API supplies and the card renderer uses.
     remote_fields = [
@@ -104,6 +133,37 @@ def check_no_unescaped_interpolation():
             "index.html does not interpolate %s into a template literal" % field,
         )
 
+    # The per-field match above only catches the literal text "repo.<field>".
+    # One alias defeats it: `const name = repo.name;` and then `${name}` in a
+    # template literal carries the same remote data past every check above
+    # without the string "repo.name" appearing anywhere near the sink. Match
+    # the sink instead of the source: an innerHTML/outerHTML assignment, or
+    # an insertAdjacentHTML call, whose argument is a template literal
+    # containing any interpolation at all is exactly the shape unescaped
+    # remote data needs, whatever the interpolated variable is called.
+    #
+    # index.html has two template-literal HTML sinks today. The error-path
+    # innerHTML assignment is a literal string with no interpolation. The
+    # portfolioCSS block reaches insertAdjacentHTML through a variable
+    # reference, not as a literal at the call site, so this pattern never
+    # even sees it; it also contains no ${ of its own (checked by hand: it
+    # is pure CSS, no repo data). Neither trips this check; a repo.name
+    # alias would.
+    sink_pattern = re.compile(
+        r"\.(?:innerHTML|outerHTML)\s*=\s*`(?P<assign>.*?)`"
+        r"|insertAdjacentHTML\([^)]*?,\s*`(?P<call>.*?)`",
+        re.S,
+    )
+    offenders = [
+        match.group("assign") or match.group("call")
+        for match in sink_pattern.finditer(source)
+        if "${" in (match.group("assign") or match.group("call"))
+    ]
+    check(
+        not offenders,
+        "index.html has no innerHTML/outerHTML/insertAdjacentHTML sink fed by a template interpolation",
+    )
+
     check(
         "safeUrl" in source,
         "index.html defines a safeUrl helper for repo-supplied URLs",
@@ -113,7 +173,9 @@ def check_no_unescaped_interpolation():
 def check_repo_urls_are_scheme_validated():
     print("\nRepo-supplied URLs are scheme validated before use")
 
-    source = read(INDEX)
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
 
     # Both navigable sinks: the anchor href and the whole-card window.open.
     check(
@@ -123,6 +185,14 @@ def check_repo_urls_are_scheme_validated():
     check(
         re.search(r"href\s*=\s*repo\.", source) is None,
         "index.html does not assign a raw repo field to an href",
+    )
+
+    # href = repo.<field> only catches direct property assignment.
+    # setAttribute('href', repo.homepage) reaches the same sink through a
+    # call the text check above never sees, so it needs its own pattern.
+    check(
+        re.search(r"setAttribute\(\s*['\"](?:href|src)['\"]\s*,\s*repo\.", source) is None,
+        "index.html does not setAttribute an href/src from a raw repo field",
     )
     check(
         "https:" in source,
@@ -138,23 +208,34 @@ def check_no_plain_http_assets():
     # never fetched, so it is not matched here.
     asset_http = re.compile(r"""(?:url\(|src\s*=\s*|href\s*=\s*)['"(]?\s*http://""")
 
-    for path in (STYLE_CSS, INDEX, RESUME, PRIVACY):
-        hits = asset_http.findall(read(path))
+    # HTML_PAGES is discovered from the filesystem, not hardcoded, so a page
+    # added after this check was written is scanned automatically.
+    style_source = None
+    for path in [STYLE_CSS] + HTML_PAGES:
+        source = read_or_fail(path)
+        if path == STYLE_CSS:
+            style_source = source
+        if source is None:
+            continue
+        hits = asset_http.findall(source)
         check(
             not hits,
             "%s has no http:// asset reference" % path.relative_to(ROOT),
         )
 
-    check(
-        "placehold.it" not in read(STYLE_CSS),
-        "css/style.css no longer references placehold.it",
-    )
+    if style_source is not None:
+        check(
+            "placehold.it" not in style_source,
+            "css/style.css no longer references placehold.it",
+        )
 
 
 def check_no_ie_conditional_shims():
     print("\nNo IE conditional comment shims")
 
-    source = read(INDEX)
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
     check("[if lt IE" not in source, "index.html has no IE conditional comment")
     check("html5shiv" not in source, "index.html does not load html5shiv")
     check("respond.min.js" not in source, "index.html does not load Respond.js")
@@ -164,7 +245,14 @@ def check_no_ie_conditional_shims():
 def check_font_awesome_is_single_local_version():
     print("\nFont Awesome is one local version site-wide")
 
-    pages = {"index.html": read(INDEX), "resume.html": read(RESUME), "privacy.html": read(PRIVACY)}
+    # HTML_PAGES is discovered from the filesystem, not hardcoded, so a page
+    # added after this check was written is scanned automatically.
+    pages = {}
+    for path in HTML_PAGES:
+        source = read_or_fail(path)
+        if source is None:
+            continue
+        pages[path.name] = source
 
     for name, source in pages.items():
         check(
@@ -180,8 +268,8 @@ def check_font_awesome_is_single_local_version():
         )
 
     for name in ("index.html", "resume.html"):
-        source = pages[name]
-        if "fa-" not in source:
+        source = pages.get(name)
+        if source is None or "fa-" not in source:
             continue
         check(
             "css/font-awesome.min.css" in source,
@@ -194,8 +282,10 @@ def check_inline_script_syntax():
 
     verify_interactivity.py syntax-checks js/main.js, but the ~90 lines that
     build the portfolio cards sit in an inline <script> in index.html and had
-    no gate at all. Extract every attribute-less <script> block and check it.
-    node is a convenience here, never a project dependency.
+    no gate at all. Extract every inline <script> block, meaning any script
+    tag without a src attribute regardless of what other attributes it
+    carries, and check it. node is a convenience here, never a project
+    dependency.
     """
     print("\nInline scripts parse")
 
@@ -203,10 +293,19 @@ def check_inline_script_syntax():
         print("  skip  node not found, cannot syntax-check inline scripts")
         return
 
-    inline = re.compile(r"<script\s*>(.*?)</script>", re.S)
+    # <script\s*> only matched an attribute-less tag, so <script type="module">
+    # or <script defer> got no gate at all, and silently: a plain <script>
+    # block elsewhere in the same file already satisfied the "has an inline
+    # script to check" assertion below. Match any script tag without a src
+    # attribute instead; a tag WITH src loads external code that this check
+    # is not meant to see.
+    inline = re.compile(r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", re.S)
 
     for path in (INDEX, RESUME):
-        blocks = inline.findall(read(path))
+        source = read_or_fail(path)
+        if source is None:
+            continue
+        blocks = inline.findall(source)
         name = path.relative_to(ROOT)
 
         if not check(bool(blocks), "%s has an inline script to check" % name):
