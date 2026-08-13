@@ -136,11 +136,35 @@ def check_no_unescaped_interpolation():
     # The per-field match above only catches the literal text "repo.<field>".
     # One alias defeats it: `const name = repo.name;` and then `${name}` in a
     # template literal carries the same remote data past every check above
-    # without the string "repo.name" appearing anywhere near the sink. Match
-    # the sink instead of the source: an innerHTML/outerHTML assignment, or
-    # an insertAdjacentHTML call, whose argument is a template literal
-    # containing any interpolation at all is exactly the shape unescaped
-    # remote data needs, whatever the interpolated variable is called.
+    # without the string "repo.name" appearing anywhere near the sink. The
+    # pattern below is a backstop for exactly that one shape, not a general
+    # XSS gate: a backtick template literal written literally at an
+    # innerHTML/outerHTML assignment, or at an insertAdjacentHTML call site,
+    # containing any interpolation at all. The actual defense against
+    # unescaped remote data is that the renderer builds DOM nodes and sets
+    # textContent instead of assigning HTML strings; this regex only guards
+    # against someone regressing to string assignment with the alias trick
+    # above still open.
+    #
+    # Bypasses that stay invisible to this pattern, each driven through this
+    # exact check by hand with an aliased repo field: the template literal
+    # assigned to a variable before it reaches the sink (const html =
+    # `...${a}...`; el.innerHTML = html;); String.raw and other tagged
+    # templates; string concatenation with + instead of interpolation;
+    # innerHTML +=; document.write; insertAdjacentHTML reached through an
+    # alias or .bind; range.createContextualFragment; jQuery's .html() and
+    # .append() (jQuery 3.7.1 is loaded on index.html); and
+    # Element.setHTMLUnsafe. Any of these carries remote data past this
+    # check untouched.
+    #
+    # It also has a false positive: it flags any interpolation at these
+    # sinks, escaped or not. `${escapeHtml(repo.name)}` fails this check
+    # exactly like `${repo.name}` does, and so does `${n}` for a plain
+    # number n. Today's tree is unaffected only because the renderer builds
+    # DOM nodes instead of assigning HTML strings at the sinks below; a
+    # future change that assigns an escaped template literal here will FAIL,
+    # and this pattern would need to allow-list the escaping call before
+    # that becomes legal.
     #
     # index.html has two template-literal HTML sinks today. The error-path
     # innerHTML assignment is a literal string with no interpolation. The
