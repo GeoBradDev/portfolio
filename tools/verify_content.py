@@ -33,6 +33,17 @@ THANKS = ROOT / "thanks.html"
 STYLE_CSS = ROOT / "css" / "style.css"
 CNAME = ROOT / "CNAME"
 
+# Left over from the ThemeForest template. verify_assets.DEAD_ASSETS covers
+# the eight libraries and image originals that issue 15 removed; these two are
+# what issue 18 found still in the tree afterwards.
+LEFTOVER_TEMPLATE_FILES = [
+    # A PHP mail handler on GitHub Pages, which cannot execute PHP, for a form
+    # that posts to FormSubmit instead.
+    "mail/contact.php",
+    # 330 KB referenced from no page, no stylesheet, and no script.
+    "video/video.mp4",
+]
+
 failures = []
 
 
@@ -279,11 +290,31 @@ def check_list_markup_is_balanced():
         print("  PASS  index.html closes every <li>")
 
 
+def check_leftover_template_files_are_gone():
+    print("\nLeftover template files are gone")
+
+    for name in LEFTOVER_TEMPLATE_FILES:
+        check(not (ROOT / name).exists(), "%s is gone" % name)
+
+    # Deleting a file that something still points at trades dead weight for a
+    # broken link, so assert nothing references them either.
+    for page in (INDEX, RESUME, THANKS):
+        source = read(page)
+        if source is None:
+            continue
+        for name in LEFTOVER_TEMPLATE_FILES:
+            check(
+                name not in source,
+                "%s does not reference %s" % (page.relative_to(ROOT), name),
+            )
+
+
 def main():
     check_contact_form_returns_visitor()
     check_thanks_page_is_a_complete_document()
     check_no_dead_form_error_markup()
     check_list_markup_is_balanced()
+    check_leftover_template_files_are_gone()
 
     print()
     if failures:
