@@ -26,6 +26,7 @@ every other verifier uses.
 import json
 import re
 import sys
+import xml.etree.ElementTree as ElementTree
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -36,6 +37,11 @@ PRIVACY = ROOT / "privacy.html"
 THANKS = ROOT / "thanks.html"
 STYLE_CSS = ROOT / "css" / "style.css"
 CNAME = ROOT / "CNAME"
+ROBOTS = ROOT / "robots.txt"
+SITEMAP = ROOT / "sitemap.xml"
+NOT_FOUND = ROOT / "404.html"
+
+SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 
 # Every page at the repo root, discovered from the filesystem rather than
 # hardcoded, so a page added later is covered instead of silently exempt.
@@ -47,7 +53,7 @@ HTML_PAGES = sorted(ROOT.glob("*.html"))
 # "every page states an indexing policy" check, which is the point: the
 # decision gets made deliberately rather than by default.
 INDEXABLE = {"index.html"}
-NOINDEX = {"resume.html", "privacy.html", "thanks.html"}
+NOINDEX = {"resume.html", "privacy.html", "thanks.html", "404.html"}
 
 failures = []
 
@@ -801,6 +807,82 @@ def check_skip_link_and_focus_visibility():
     )
 
 
+def check_site_root_files():
+    """The three files a crawler and a mistyped URL look for.
+
+    The important assertion is the Disallow one. A Disallow on a noindex page
+    is the classic way to defeat your own noindex: the crawler is refused the
+    file, so it never reads the tag that told it not to list the file, and
+    the URL can still surface in results from inbound links alone.
+    """
+    print("\nrobots.txt, sitemap.xml, and 404.html")
+
+    host = site_host()
+    if not check(host is not None, "CNAME names the site host"):
+        return
+
+    robots = read(ROBOTS)
+    if check(robots is not None, "robots.txt exists"):
+        check(
+            re.search(r"(?mi)^user-agent\s*:", robots) is not None,
+            "robots.txt declares a User-agent",
+        )
+        check(
+            "https://%s/sitemap.xml" % host in robots,
+            "robots.txt points at the sitemap on %s" % host,
+        )
+        disallows = [
+            value.strip()
+            for value in re.findall(r"(?mi)^disallow\s*:(.*)$", robots)
+            if value.strip()
+        ]
+        for page in sorted(NOINDEX):
+            check(
+                not any(page in rule for rule in disallows),
+                "robots.txt does not Disallow %s, so its noindex stays readable" % page,
+            )
+
+    sitemap = read(SITEMAP)
+    if check(sitemap is not None, "sitemap.xml exists"):
+        try:
+            root = ElementTree.fromstring(sitemap)
+        except ElementTree.ParseError as error:
+            fail("sitemap.xml is not well-formed XML: %s" % error)
+        else:
+            locations = [
+                node.text.strip() for node in root.iter(SITEMAP_NS + "loc") if node.text
+            ]
+            check(bool(locations), "sitemap.xml lists at least one URL")
+            for location in locations:
+                check(
+                    location.startswith("https://%s/" % host),
+                    "sitemap entry is https and on %s (%s)" % (host, location),
+                )
+                # A sitemap is a request to index. Listing a noindex page
+                # asks a crawler to do two contradictory things.
+                page = location[len("https://%s/" % host):] or "index.html"
+                check(
+                    page not in NOINDEX,
+                    "sitemap entry %s is a page that may be indexed" % page,
+                )
+            for page in sorted(INDEXABLE):
+                expected = "https://%s/" % host
+                if page != "index.html":
+                    expected = "https://%s/%s" % (host, page)
+                check(expected in locations, "sitemap lists %s" % expected)
+
+    source = read(NOT_FOUND)
+    if check(source is not None, "404.html exists"):
+        check(
+            source.lstrip().lower().startswith("<!doctype html>"),
+            "404.html opens with a doctype",
+        )
+        check(
+            re.search(r'href="/"', source) is not None,
+            "404.html links back to the site root",
+        )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -814,6 +896,7 @@ def main():
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()
+    check_site_root_files()
 
     print()
     if failures:

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One entry, because one page is meant to be found. resume.html is sent on
+     request, privacy.html belongs to another project, thanks.html is a
+     confirmation, and 404.html is an error page. All four carry a noindex,
+     and listing a noindex page in a sitemap asks a crawler to do two
+     contradictory things. No lastmod: there is no build step to keep one
+     honest, and a stale lastmod is worse than an absent one. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://www.geobrad.dev/</loc>
+        <changefreq>monthly</changefreq>
+        <priority>1.0</priority>
+    </url>
+</urlset>

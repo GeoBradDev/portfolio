@@ -1,0 +1,11 @@
+# resume.html, privacy.html, thanks.html, and 404.html are deliberately kept
+# out of search results, and they do that with a robots noindex in their own
+# <head>, not from here. A Disallow would be worse than nothing: it stops a
+# crawler fetching the page, so the crawler never reads the noindex, and the
+# URL can still be listed from an inbound link alone. Allow everything and
+# let the pages speak. tools/verify_seo_a11y.py asserts no Disallow names
+# any of them.
+User-agent: *
+Allow: /
+
+Sitemap: https://www.geobrad.dev/sitemap.xml
