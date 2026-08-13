@@ -207,14 +207,16 @@ def check_no_dead_form_error_markup():
 
     source = read_or_fail(INDEX)
     if source is not None:
+        markup = without_comments(source, "html")
         for token in ("form-message", "name-error", "email-error", "message-error"):
             check(
-                token not in source,
+                token not in markup,
                 "index.html no longer carries the dead %s element" % token,
             )
 
     css = read_or_fail(STYLE_CSS)
     if css is not None:
+        css = without_comments(css, "css")
         for token in ("name-error", "email-error", "message-error", "#form-message"):
             check(
                 token not in css,
@@ -228,6 +230,75 @@ def check_no_dead_form_error_markup():
                 re.search(r"(?m)^%s\s*\{" % re.escape(selector), css) is None,
                 "css/style.css no longer opens a %s rule" % selector,
             )
+
+
+def without_comments(source, style):
+    """Strip comments so a scan reads code, not prose about code.
+
+    These checks assert that a selector is no longer styled and that an
+    element is no longer in the markup. A comment explaining why something
+    was removed has to name the thing it removed, and a bare substring scan
+    counts that explanation as the offense it is documenting. Strip comments
+    first so the file can keep the explanation.
+    """
+    pattern = r"/\*.*?\*/" if style == "css" else r"<!--.*?-->"
+    return re.sub(pattern, "", source, flags=re.S)
+
+
+def declarations(css, selector):
+    """The declaration body of the rule opening exactly at `selector`.
+
+    Matches the selector at the start of a line so that .submit-btn does not
+    also pull in .submit-btn:hover, and returns "" when the rule is absent.
+    """
+    rule = re.search(
+        r"(?m)^%s\s*\{(.*?)\}" % re.escape(selector), css, re.S
+    )
+    return rule.group(1) if rule else ""
+
+
+def check_contact_form_spacing_is_declared():
+    """The deleted error spans were load-bearing, so the spacing must be real.
+
+    Nothing wrote to them, but they were not weightless. Each empty span was
+    display:block with margin-top:8px plus .mb-30's margin-bottom:30px, and
+    #form-message was a full-width float with the same margin box, all inside
+    floated grid columns where those margins could not collapse away. Removing
+    them collapsed the gap between the name/email row and the textarea from
+    30px to 0, and between the textarea and the button from 76px to 8px,
+    measured in Chrome at 1280px against origin/main.
+
+    So the spacing now has to be declared. Three declarations carry it, and
+    this asserts each one exists rather than asserting a pixel value, which
+    keeps the check source-level: what it prevents is a future edit dropping
+    one and silently collapsing the form again.
+
+    A margin-top on .submit-btn would not work and is deliberately not what
+    is asserted. Every field sits in a floated grid column, so the button's
+    static position is the top of the form, and clear: both turns any
+    margin-top into clearance that absorbs it. The last float's bottom margin
+    is what the button actually clears past, which is why the pre-button gap
+    lives on textarea.input-field.
+    """
+    print("\nContact form spacing is declared, not emergent")
+
+    css = read_or_fail(STYLE_CSS)
+    if css is None:
+        return
+
+    margin_bottom = re.compile(r"(?<!-)margin-bottom\s*:")
+    check(
+        margin_bottom.search(declarations(css, ".input-field")) is not None,
+        ".input-field declares the margin-bottom that spaces the fields",
+    )
+    check(
+        margin_bottom.search(declarations(css, "textarea.input-field")) is not None,
+        "textarea.input-field declares the margin-bottom that spaces the button",
+    )
+    check(
+        re.search(r"(?<!-)clear\s*:", declarations(css, ".submit-btn")) is not None,
+        ".submit-btn declares clear, so it lands below the floated columns",
+    )
 
 
 class ListMarkup(HTMLParser):
@@ -354,6 +425,7 @@ def main():
     check_contact_form_returns_visitor()
     check_thanks_page_is_a_complete_document()
     check_no_dead_form_error_markup()
+    check_contact_form_spacing_is_declared()
     check_list_markup_is_balanced()
     check_leftover_template_files_are_gone()
     check_resume_declares_no_unloaded_font()

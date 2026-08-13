@@ -1110,8 +1110,18 @@ Contact
     margin-top: 50px;
 }
 
+/* The margin-bottom here and the margin-top on .submit-btn below replace
+   spacing that used to come from the empty validation spans, deleted in
+   issue 18 because nothing ever wrote to them. They were dead as content but
+   not weightless: each was display:block with margin-top:8px plus .mb-30's
+   margin-bottom:30px, inside floated grid columns where those margins could
+   not collapse away. Removing them alone collapsed the gap between the
+   name/email row and the textarea from 30px to 0, and between the textarea
+   and the button from 76px to 8px. These two declarations restore both, and
+   verify_content.py asserts they exist so the form cannot collapse again. */
 .input-field {
     width: 100%;
+    margin-bottom: 30px;
     padding: 8px 16px;
     color: #232323;
     border: 1px solid #ddd;
@@ -1120,11 +1130,24 @@ Contact
 
 textarea.input-field {
     height: 190px;
+    /* The gap before the button has to live here, not as a margin-top on
+       .submit-btn. Every field sits in a floated grid column, so the button's
+       static position is the top of the form and clear: both below turns any
+       margin-top it declares into clearance, which absorbs it entirely. The
+       textarea's column is the last float, so its bottom margin is what the
+       button actually clears past. 68px here measures 76px on screen, which
+       is what the deleted #form-message and .message-error used to produce. */
+    margin-bottom: 68px;
     resize: none;
 }
 
 .submit-btn {
     display: block;
+    /* What used to push the button below the floated field columns was
+       #form-message, itself a full-width float, now deleted. Without this the
+       button's position falls out of float overlap rules rather than out of
+       anything declared. */
+    clear: both;
     margin: 0 auto;
     padding: 8px 20px;
     font-size: 16px;
