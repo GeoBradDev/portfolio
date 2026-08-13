@@ -43,6 +43,19 @@ NOT_FOUND = ROOT / "404.html"
 
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 
+# Portfolio card text, as (selector, background when the rule declares none).
+# The cards are built by the inline renderer in index.html and styled by the
+# embedded CSS in the same file, so both live there rather than in style.css.
+CONTRAST_PAIRS = [
+    (".portfolio-title", "#ffffff"),
+    (".portfolio-description p", "#ffffff"),
+    (".portfolio-stars", None),      # declares its own background
+    (".portfolio-language", None),   # declares its own background
+    (".portfolio-link-code", "#ffffff"),
+    (".portfolio-link-demo", None),  # declares its own background
+]
+CONTRAST_MINIMUM = 4.5
+
 # Every page at the repo root, discovered from the filesystem rather than
 # hardcoded, so a page added later is covered instead of silently exempt.
 # Same rule verify_assets.py, verify_security.py, and verify_content.py use.
@@ -883,6 +896,98 @@ def check_site_root_files():
         )
 
 
+def channel_luminance(value):
+    """One sRGB channel, 0-255, linearized per WCAG 2.x."""
+    channel = value / 255.0
+    if channel <= 0.04045:
+        return channel / 12.92
+    return ((channel + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(color):
+    """WCAG relative luminance of a #rrggbb string."""
+    color = color.lstrip("#")
+    red, green, blue = (int(color[i:i + 2], 16) for i in (0, 2, 4))
+    return (
+        0.2126 * channel_luminance(red)
+        + 0.7152 * channel_luminance(green)
+        + 0.0722 * channel_luminance(blue)
+    )
+
+
+def contrast_ratio(foreground, background):
+    first = relative_luminance(foreground)
+    second = relative_luminance(background)
+    lighter, darker = max(first, second), min(first, second)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def rule_body(source, selector):
+    """The declaration block of the rule opening exactly at `selector`."""
+    match = re.search(r"(?m)^%s\s*\{(.*?)\}" % re.escape(selector), source, re.S)
+    return match.group(1) if match else None
+
+
+def declared_color(body, prop):
+    """A #rrggbb or #rgb value for `prop` in a declaration block, expanded."""
+    match = re.search(r"(?<![-\w])%s\s*:\s*(#[0-9a-fA-F]{3,6})" % prop, body)
+    if not match:
+        return None
+    value = match.group(1)
+    if len(value) == 4:
+        value = "#" + "".join(char * 2 for char in value[1:])
+    return value.lower()
+
+
+def check_text_contrast():
+    """Computed, not asserted, so changing a color rechecks it.
+
+    Only the portfolio card palette, which is where the borderline values
+    are. The rest of the site is #232323, #333, or #484848 on white, all of
+    them above 8:1, and a general cascade-resolving checker is what Lighthouse
+    and axe are for; both are run against the real page rather than the
+    source.
+
+    The foreground is read out of the file, which is the half that changes.
+    The background is only named here when the rule does not declare its own,
+    because it cannot be derived from the CSS alone: .portfolio-description p
+    declares a color and inherits the white from .portfolio-card several
+    levels up.
+
+    AA is 4.5:1 for body text. Every pair below is body text: the largest is
+    14px, well under the 18.66px bold or 24px regular that would qualify for
+    the 3:1 large-text threshold.
+    """
+    print("\nCard text meets the AA contrast threshold")
+
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
+
+    for selector, assumed_background in CONTRAST_PAIRS:
+        body = rule_body(source, selector)
+        if not check(body is not None, "index.html styles %s" % selector):
+            continue
+
+        foreground = declared_color(body, "color")
+        if not check(foreground is not None, "%s declares a text color" % selector):
+            continue
+
+        background = declared_color(body, "background") or assumed_background
+        if not check(
+            background is not None,
+            "%s has a known background to measure against" % selector,
+        ):
+            continue
+
+        ratio = contrast_ratio(foreground, background)
+        check(
+            ratio >= CONTRAST_MINIMUM,
+            "%s is %.2f:1 (%s on %s), at or above %.1f:1"
+            % (selector, ratio, foreground, background, CONTRAST_MINIMUM),
+        )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -897,6 +1002,7 @@ def main():
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()
     check_site_root_files()
+    check_text_contrast()
 
     print()
     if failures:
