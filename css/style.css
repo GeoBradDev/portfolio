@@ -1123,28 +1123,6 @@ textarea.input-field {
     resize: none;
 }
 
-.name-error,
-.email-error,
-.message-error,
-.error {
-    display: block;
-    margin-top: 8px;
-    font-size: 14px;
-    color: #ff2828;
-}
-
-.success {
-    display: block;
-    margin-top: 8px;
-    font-size: 14px;
-    color: #1e9402;
-}
-
-#form-message {
-    float: left;
-    width: 100%;
-}
-
 .submit-btn {
     display: block;
     margin: 0 auto;

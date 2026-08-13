@@ -184,9 +184,45 @@ def check_thanks_page_is_a_complete_document():
     )
 
 
+def check_no_dead_form_error_markup():
+    """Nothing writes to these elements, and nothing has since issue 16.
+
+    The validation block in js/main.js that populated them was deleted, so
+    the spans, the message div, and their CSS are markup and bytes that no
+    code path can ever reach. This is the same rule issues 15 and 16 applied
+    to dead libraries and dead JavaScript, held over the markup.
+    """
+    print("\nNo dead contact form validation markup")
+
+    source = read_or_fail(INDEX)
+    if source is not None:
+        for token in ("form-message", "name-error", "email-error", "message-error"):
+            check(
+                token not in source,
+                "index.html no longer carries the dead %s element" % token,
+            )
+
+    css = read_or_fail(STYLE_CSS)
+    if css is not None:
+        for token in ("name-error", "email-error", "message-error", "#form-message"):
+            check(
+                token not in css,
+                "css/style.css no longer styles %s" % token,
+            )
+        # .error and .success are short enough to appear inside an unrelated
+        # selector or a comment, so match them as a rule opening at the start
+        # of a line rather than anywhere in the file.
+        for selector in (".error", ".success"):
+            check(
+                re.search(r"(?m)^%s\s*\{" % re.escape(selector), css) is None,
+                "css/style.css no longer opens a %s rule" % selector,
+            )
+
+
 def main():
     check_contact_form_returns_visitor()
     check_thanks_page_is_a_complete_document()
+    check_no_dead_form_error_markup()
 
     print()
     if failures:
