@@ -124,3 +124,8 @@ fabric.properties
 # Python bytecode from tools/
 __pycache__/
 *.py[cod]
+
+# Agent scratch: plan ledgers, task briefs, and review packages. Lives at the
+# root of a worktree, where the .claude/worktrees/ rule above cannot reach it.
+# Committing scratch into this repo breaks the Pages build; see 1194d9e.
+.superpowers/

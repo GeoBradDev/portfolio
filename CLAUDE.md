@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git exception for /work-issue
+
+When executing the /work-issue workflow, Claude may run `git commit` and `git push`
+on `issue-*` feature branches only. Never commit or push to the default branch, and
+never commit or push outside a /work-issue run. The global no-commit policy applies
+in all other circumstances.
+
 ## Project Overview
 
 Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial software developer's personal site. Deployed to GitHub Pages at www.geobrad.dev.
@@ -11,14 +18,27 @@ Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial softwar
 - **Frontend**: Vanilla HTML5, CSS3, JavaScript (jQuery-based)
 - **CSS Framework**: Bootstrap 3.x
 - **Key Libraries**:
-  - jQuery 3.x (js/jquery.min.js)
-  - Bootstrap JS (js/bootstrap.min.js)
+  - jQuery 3.7.1 (js/jquery.min.js)
+  - Bootstrap JS 3.3.7 (js/bootstrap.min.js)
 - **Deployment**: GitHub Pages with custom domain (CNAME)
 
 Owl Carousel, Magnific Popup, Isotope, imagesLoaded, jQuery Typer, and Particles.js
 were removed in issue #15. None of them had a matching element on any page, so all
 of them downloaded and did nothing. Do not reintroduce a library without an element
 that actually uses it.
+
+The file shipped jQuery 2.2.4 for two years while this document claimed 3.x, which left
+CVE-2020-11022, CVE-2020-11023, and CVE-2019-11358 open (issue #17). It is now 3.7.1, and
+`tools/verify_security.py` asserts the version in the file against the version named here, so
+the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3 support; do
+not downgrade one without the other.
+
+Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, linked from
+`index.html` and `resume.html`. `privacy.html` has no `<link>` tags and no `fa-` icons, so it
+neither links the stylesheet nor needs it; do not add an icon there without adding the link.
+`resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
+majors, two syntaxes, and a third party on the critical path. Use bare `fa fa-*` classes; the
+FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rejects them.
 
 ## Site Structure
 
@@ -67,10 +87,15 @@ still hit-testable, so without it the overlay swallows every click and the "Live
 Demo" and "Code" anchors become unreachable.
 
 ### Dynamic Portfolio Loading
-The portfolio section in index.html (script at lines 469-882, embedded styles at 579-871) dynamically fetches and displays GitHub repositories:
+The portfolio section in index.html (inline `<script>` before `</body>`, embedded styles further
+down the same block) dynamically fetches and displays GitHub repositories:
 - Fetches repos from multiple GitHub users: GeoBradDev, MapTheVoteSTL, Seaside-Sustainability-Web-GIS
 - Filters repositories containing "portfolio" in description
-- Displays cards with repo name, language, stars, description, and links
+- Cards are built with `document.createElement` and `textContent`, never a template literal, so
+  a hostile repo `name` or `description` can only ever render as text
+- `safeUrl()` gates the "Live Demo" and "Code" links: it accepts only an `https:` URL and returns
+  `null` otherwise, and a `null` result means that link, or the whole-card click handler, does
+  not render at all
 - Embedded CSS in index.html for portfolio styling
 
 ### Navigation & Scrolling
@@ -173,6 +198,45 @@ every `<img>` carries explicit `width`/`height`, the hero stays under 300 KB, an
 homepage stays under 1 MB. Standard library only. Run it after touching any asset,
 markup `<img>` tag, or `<script>`/`<link>` tag.
 
+### Verifying the security criteria
+
+```bash
+python3 tools/verify_security.py
+```
+
+Exits 0 when the issue #17 acceptance criteria still hold: jQuery is at or above 3.5, the
+version in the file matches the one named in this document, no GitHub API field is interpolated
+into a template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an
+`href`, `window.open`, or `setAttribute`, no page or stylesheet requests an `http://` asset, no
+IE conditional shim survives, and Font Awesome is one local major site-wide. Standard library
+only. Run it after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled
+library.
+
+The pages it scans are discovered with a glob over `*.html` at the repo root, not a hardcoded
+list, so a new page is covered the moment it is added rather than being silently exempt. Two
+consequences worth knowing: a missing file is reported as a FAIL and the remaining checks still
+run, rather than dying on a traceback partway through; and `privacy.html` is swept even though
+it is a vendor-generated Termly document nobody hand-authored, so a regenerated paste containing
+an `http://` link would fail the gate with no exclusion mechanism.
+
+It also runs `node --check` over every inline `<script>` on those pages, the way
+`verify_interactivity.py` does for `js/main.js`. Any script tag without a `src` is gated,
+including `type="module"` and `defer`; only external `src` tags are skipped. The gated inline
+`<script>` in `index.html` runs 466 lines total; about 301 of those are an embedded
+CSS-as-a-string block injected via `insertAdjacentHTML`, leaving roughly 165 lines of actual
+portfolio-renderer JavaScript, and before this it had no syntax gate at all. `node` is a
+convenience, skipped when absent, never a project dependency.
+
+Do not mistake the interpolation checks for a general XSS gate. They catch a template literal
+written literally at an `innerHTML`/`outerHTML` assignment or an `insertAdjacentHTML` call, and
+that is all. Assigning the literal to a variable first, string concatenation, `innerHTML +=`,
+`document.write`, `createContextualFragment`, and jQuery's `.html()` and `.append()` all walk
+straight past it, and jQuery is loaded on `index.html`. The actual defense is that the renderer
+builds DOM nodes and sets `textContent`; the checks only stop that defense from being quietly
+undone. They are also blunt in the other direction: any interpolation at those sites fails,
+including a safe `${escapeHtml(x)}`, so introducing an escaping helper means changing the rule
+first.
+
 ### Regenerating optimized images
 
 ```bash
@@ -193,14 +257,14 @@ Requires Pillow. Never commit a full-resolution camera original.
 
 **JavaScript Changes**:
 - Main logic: `js/main.js`
-- Some inline JavaScript in `index.html` (portfolio loading logic at lines 469-882)
+- Some inline JavaScript in `index.html` (portfolio loading logic in the `<script>` block before `</body>`)
 
 **Important**: When modifying the portfolio loading logic in index.html, the JavaScript and CSS are both inline. The portfolio cards system includes both functionality and styles in the same section.
 
 ### GitHub API Rate Limiting
 The portfolio section fetches from GitHub API. Be aware:
 - Unauthenticated requests have 60 requests/hour limit
-- Error handling is implemented (the `catch` at index.html:575)
+- Error handling is implemented (the `catch` in `loadPortfolio()` in index.html)
 - Consider this when testing portfolio loading features
 
 ## Common Tasks
@@ -214,9 +278,9 @@ Portfolio items are automatically pulled from GitHub repos with "portfolio" in t
 Edit `resume.html` - it's a standalone HTML file with inline styles and JavaScript.
 
 ### Modifying Contact Form
-The form submits to FormSubmit (line 393 in index.html). To change:
+The form submits to FormSubmit (the `<form id="contact-form">` action in index.html). To change:
 - Update the action URL with new FormSubmit endpoint
-- Honeypot field is present for spam protection (line 410)
+- Honeypot field is present for spam protection (the hidden `_honey` input)
 
 ### Adding/Changing Images
 Every raster image ships at roughly 2x its largest CSS display size, as WebP with a
