@@ -219,10 +219,71 @@ def check_no_dead_form_error_markup():
             )
 
 
+class ListMarkup(HTMLParser):
+    """Find an <li> that opens while a sibling <li> is still open.
+
+    HTMLParser reports raw tags and never auto-closes, which is exactly what
+    is wanted here: browsers do the auto-closing that hides this bug. Each
+    <ul>/<ol> pushes a context so a legitimately nested list is not misread
+    as an unclosed item.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.problems = []
+        self.lists = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("ul", "ol"):
+            self.lists.append(False)
+        elif tag == "li":
+            if not self.lists:
+                self.problems.append(
+                    "line %d: <li> outside any list" % self.getpos()[0]
+                )
+                return
+            if self.lists[-1]:
+                self.problems.append(
+                    "line %d: <li> opens while the previous <li> is still open"
+                    % self.getpos()[0]
+                )
+            self.lists[-1] = True
+
+    def handle_endtag(self, tag):
+        if tag == "li":
+            if self.lists:
+                self.lists[-1] = False
+        elif tag in ("ul", "ol"):
+            if self.lists:
+                if self.lists[-1]:
+                    self.problems.append(
+                        "line %d: </%s> closes with an <li> still open"
+                        % (self.getpos()[0], tag)
+                    )
+                self.lists.pop()
+
+
+def check_list_markup_is_balanced():
+    print("\nEvery list item in index.html is closed")
+
+    source = read_or_fail(INDEX)
+    if source is None:
+        return
+
+    parser = ListMarkup()
+    parser.feed(source)
+    if parser.problems:
+        for problem in parser.problems:
+            fail("index.html %s" % problem)
+    else:
+        print("  PASS  index.html closes every <li>")
+
+
 def main():
     check_contact_form_returns_visitor()
     check_thanks_page_is_a_complete_document()
     check_no_dead_form_error_markup()
+    check_list_markup_is_balanced()
 
     print()
     if failures:
