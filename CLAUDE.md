@@ -19,7 +19,7 @@ Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial softwar
 - **CSS Framework**: Bootstrap 3.x
 - **Key Libraries**:
   - jQuery 3.7.1 (js/jquery.min.js)
-  - Bootstrap JS 3.3.7 (js/bootstrap.min.js)
+  - Bootstrap 3.4.1 (css/bootstrap.min.css, js/bootstrap.min.js)
 - **Deployment**: GitHub Pages with custom domain (CNAME)
 
 Owl Carousel, Magnific Popup, Isotope, imagesLoaded, jQuery Typer, and Particles.js
@@ -32,6 +32,13 @@ CVE-2020-11022, CVE-2020-11023, and CVE-2019-11358 open (issue #17). It is now 3
 `tools/verify_security.py` asserts the version in the file against the version named here, so
 the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3 support; do
 not downgrade one without the other.
+
+Bootstrap is 3.4.1, the final 3.x release. 3.3.7 carried CVE-2018-14040, CVE-2018-14041,
+CVE-2018-14042, and CVE-2019-8331, XSS through `data-*` attributes in collapse, scrollspy, affix,
+tooltip, and popover. None was exploitable here, since every attribute is authored, but scanners
+flag the version. Both files are byte-identical to the npm `bootstrap@3.4.1` tarball and match the
+official SRI hashes; the Glyphicons fonts did not change between the two releases. Bootstrap 3 is
+end of life and does not support jQuery 4, so jQuery stays on 3.x.
 
 Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, linked from
 `index.html` and `resume.html`. `privacy.html`, `thanks.html`, and `404.html` carry `<link>` tags
@@ -373,7 +380,7 @@ the text of an `img` tag, and this file reported it as a real image with no `wid
 `img/og-card.jpg` is in `SHIPPED_VARIANTS` but deliberately not in `HOMEPAGE_ASSETS`: no page
 fetches it, only link unfurlers do, so it is not part of the first-paint budget.
 `projects.json` is the opposite case and joined `HOMEPAGE_ASSETS` in issue #20, because the
-renderer fetches it on every load. The homepage totals 657.5 KB against the 1024 KB budget.
+renderer fetches it on every load. The homepage totals 660.5 KB against the 1024 KB budget.
 
 ### Verifying the security criteria
 

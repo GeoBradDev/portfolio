@@ -11,8 +11,10 @@
          page links to it. Unlinked keeps a visitor from finding it and does
          nothing to stop a crawler, so say it here too. robots.txt must not
          also Disallow this page: a crawler that is refused the file never
-         reads the tag telling it not to list the file. -->
-    <meta name="robots" content="noindex, follow">
+         reads the tag telling it not to list the file. nofollow keeps a
+         crawler from following the Download PDF link: a PDF cannot carry a
+         noindex of its own, and Pages cannot send an X-Robots-Tag header. -->
+    <meta name="robots" content="noindex, nofollow">
 
     <link rel="stylesheet" href="css/font-awesome.min.css">
     <style>
