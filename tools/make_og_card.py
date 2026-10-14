@@ -99,7 +99,7 @@ def main():
 
     lines = [
         ("Brad Stricherz", name_font, (255, 255, 255), 236),
-        ("Geospatial Software Engineer", role_font, (233, 233, 233), 350),
+        ("Senior Geospatial Software Engineer", role_font, (233, 233, 233), 350),
         ("GEOBRAD.DEV", host_font, (255, 255, 255), 430),
     ]
     for text, font, fill, top in lines:

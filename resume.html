@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resume | Brad Stricherz, Geospatial Software Engineer</title>
-    <meta name="description" content="Resume of Brad Stricherz: 15 years of geospatial work, WebGIS platforms on React and OpenLayers, spatial backends on Django Ninja and PostGIS.">
+    <title>Resume | Brad Stricherz, Senior Geospatial Software Engineer</title>
+    <meta name="description" content="Resume of Brad Stricherz: senior software engineer with 15+ years in geospatial intelligence and WebGIS, building React, TypeScript, Python, and PostGIS platforms. Active TS/SCI clearance.">
     <link rel="canonical" href="https://www.geobrad.dev/resume.html">
 
     <!-- The resume is sent on request rather than published, which is why no
@@ -46,7 +46,14 @@
 
         h1 {
             font-size: 24px;
+            margin: 0 0 4px 0;
+        }
+
+        .headline {
             margin: 0 0 10px 0;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
         }
 
         h2 {
@@ -103,6 +110,14 @@
             margin-top: 14px;
             margin-bottom: 6px;
             font-size: 13.5px;
+        }
+
+        /* Keeps the date range on one line. Without it the long NGA title
+           squeezed "2010 - Sep 2025" into two lines in the printed PDF. */
+        .job-title span {
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-left: 12px;
         }
 
         .skills-list li {
@@ -346,6 +361,7 @@
 <div class="container">
     <header style="position: relative;">
         <h1>Brad Stricherz</h1>
+        <p class="headline">Senior Geospatial Software Engineer</p>
         <div class="badge-container">
             <img src="img/qr_code-240.png" alt="QR Code" width="240" height="239"
                  style="height: 60px; width: 60px; object-fit: contain;">
@@ -363,46 +379,64 @@
             <i class="fa fa-github icon" aria-hidden="true"></i><a href="https://github.com/GeoBradDev">GitHub</a>
         </p>
         <p class="location-line">
-            <i class="fa fa-map-marker icon" aria-hidden="true"></i>St. Louis, MO | TS/SCI Clearance
+            <i class="fa fa-map-marker icon" aria-hidden="true"></i>St. Louis, MO | Active TS/SCI Clearance
         </p>
         <button id="theme-toggle" class="theme-toggle">🌙 Dark Mode</button>
     </header>
 
     <section class="section">
         <h2><i class="fa fa-user icon" aria-hidden="true"></i>Professional Summary</h2>
-        <p>Geospatial Software Engineer with 15+ years building production WebGIS platforms and spatial data
-            systems. Leads full-stack development at Carbon Solutions on React/OpenLayers frontends and
-            Django Ninja/PostGIS backends for carbon capture and storage data. Previously at the National
-            Geospatial-Intelligence Agency, first as a geospatial analyst and later as a full-stack developer
-            on systems used in U.S. Government operations worldwide. Founded GeoBrad.dev in 2024 for pro bono
-            geospatial work with nonprofits and researchers.</p>
+        <p>Senior software engineer with 15+ years in geospatial intelligence and WebGIS development, pairing a
+            GEOINT analyst's command of spatial data with full-stack engineering in React, TypeScript, Python, and
+            PostGIS. At Gateway Geospatial Group (G3), builds a containerized geospatial data platform for a defense
+            customer, deployed to OpenShift on classified networks. Spent 15 years at the National
+            Geospatial-Intelligence Agency, progressing from imagery analyst to full-stack developer on systems used
+            in U.S. Government operations worldwide. Founder of GeoBrad.dev, an open-source geospatial practice
+            serving nonprofits and researchers. M.S. in Spatial Data Science, Penn State. Active TS/SCI
+            clearance.</p>
     </section>
     <section class="section">
         <h2><i class="fa fa-code icon" aria-hidden="true"></i>Technical Skills</h2>
         <ul class="skills-list">
-            <li><strong>Frontend:</strong> JavaScript, React, React Native, OpenLayers, Leaflet, CesiumJS</li>
-            <li><strong>Backend:</strong> Python, Django, GeoDjango, Django Ninja, FastAPI, Node.js</li>
-            <li><strong>Databases:</strong> PostgreSQL, PostGIS, SQL</li>
-            <li><strong>DevOps:</strong> Docker, Git, GitLab CI/CD, GitHub Actions</li>
-            <li><strong>Geospatial:</strong> WebGIS, GEOINT, Spatial Analysis, Geoprocessing</li>
+            <li><strong>Geospatial:</strong> PostGIS, GeoDjango, OGC services, ArcGIS REST, STAC, GeoPandas, ArcPy, PyQGIS, GEOINT, Imagery Analysis, Spatial Analysis</li>
+            <li><strong>Mapping:</strong> OpenLayers, Leaflet, CesiumJS</li>
+            <li><strong>Frontend:</strong> TypeScript, JavaScript, React, React Native, Chakra UI</li>
+            <li><strong>Backend and Data:</strong> Python, Django, Django Ninja, FastAPI, GraphQL, Node.js, Apache Airflow</li>
+            <li><strong>Databases and Search:</strong> PostgreSQL, Trino, Neo4j, OpenSearch, SQL</li>
+            <li><strong>DevOps:</strong> Docker, OpenShift, Helm, GitLab CI/CD, GitHub Actions, Git</li>
         </ul>
     </section>
 
     <section class="section">
         <h2><i class="fa fa-briefcase icon" aria-hidden="true"></i>Professional Experience</h2>
 
-        <div class="job-title">Lead Geospatial Software Engineer, Carbon Solutions<span>Sep 2025 - Present</span>
+        <div class="job-title">Senior Software Engineer, Gateway Geospatial Group (G3)<span>Apr 2026 - Present</span>
         </div>
         <ul>
-            <li>Lead architecture and delivery of production WebGIS platforms for carbon capture, storage, and emissions intelligence across the United States.
+            <li>Build full-stack features for a containerized geospatial data platform serving a defense customer, across React/TypeScript, GraphQL, and Python/Airflow.
             </li>
-            <li>Design full-stack geospatial systems with React/OpenLayers, Django Ninja, and PostGIS for spatial querying and interactive visualization of environmental datasets.
+            <li>Developed a self-service onboarding wizard that registers OGC, ArcGIS REST, STAC, and database sources, with secure-by-design credential handling and SSRF protection.
             </li>
-            <li>Build the spatial APIs and microservices behind the platform's geoprocessing, vector tile delivery, and spatial analytics.
+            <li>Write ingestion pipelines into a federated Trino, Neo4j, and OpenSearch stack, and built an operations console for pipeline monitoring.
             </li>
-            <li>Own the cloud infrastructure and CI/CD pipelines for the platform's geospatial services.
+            <li>Led the admin UI migration to Chakra UI v3, improving accessibility and performance, and enforce a 95% test coverage gate across three applications.
             </li>
-            <li>Collaborate with climate scientists, data engineers, and executive stakeholders to translate decarbonization requirements into technical solutions.
+            <li>Support GitLab CI/CD pipelines deploying via Helm to OpenShift on classified networks, and remediate security scan findings for accreditation.
+            </li>
+            <li>Established an AI-assisted, multi-agent development workflow.
+            </li>
+        </ul>
+
+        <div class="job-title">Founder and Geospatial Developer, GeoBrad.dev<span>2024 - Present</span>
+        </div>
+        <ul>
+            <li>Founded an open-source geospatial practice delivering mapping and spatial analysis tools to nonprofits, researchers, and community organizers, mostly pro bono and built so each organization can run it without a GIS team.
+            </li>
+            <li>Built and open-sourced a full-stack WebGIS template suite: a Django Ninja/PostGIS backend, a React/Leaflet web frontend, and a React Native/Expo mobile app that runs against it.
+            </li>
+            <li>Built QuakeGlobe, a real-time 3D earthquake visualizer using CesiumJS, React, and the USGS Earthquake API, with magnitude and depth filters and animated playback.
+            </li>
+            <li>Automated extraction and geospatial matching of St. Louis property tax auction data, parsing sheriff sale PDFs and fuzzy-matching addresses to parcels with GeoPandas.
             </li>
         </ul>
 
@@ -410,17 +444,17 @@
             Geospatial-Intelligence Agency<span>2010 - Sep 2025</span>
         </div>
         <ul>
-            <li>Progressed from geospatial analyst to full-stack developer over a 15-year career, on systems used in U.S. Government operations worldwide.
+            <li>Progressed from GEOINT and imagery analyst to full-stack developer over 15 years, building and supporting systems used in U.S. Government operations worldwide.
             </li>
             <li>Developed web applications for the Aeronautical Safety and Navigation Office using React, FastAPI, and PostGIS.
             </li>
             <li>Built interactive mapping tools and microservices for aeronautical safety visualization and workflow automation.
             </li>
-            <li>Deployed platforms with GitLab CI/CD, Docker, and PostgreSQL/PostGIS backends.
+            <li>Shipped applications through GitLab CI/CD and Docker on PostgreSQL/PostGIS backends.
             </li>
-            <li>Supported time-sensitive intelligence operations and targeting missions for FBI and DIA.
+            <li>Produced geospatial intelligence for time-sensitive operations and targeting missions supporting the FBI and DIA.
             </li>
-            <li>Deployed to embassies and military commands in Iraq, Saudi Arabia, South Korea, and aboard U.S. Navy's 7th Fleet as GEOINT analyst.
+            <li>Deployed as a GEOINT analyst to embassies and military commands in Iraq, Saudi Arabia, and South Korea, and aboard the U.S. Navy's 7th Fleet.
             </li>
         </ul>
     </section>
@@ -439,7 +473,7 @@
         <ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
             <li>Cesium Certified Developer</li>
             <li>DoD Certified Python Instructor</li>
-            <li>Penn State: Geospatial Programming & Web Map Development</li>
+            <li>Penn State: Geospatial Programming and Web Map Development</li>
             <li>GEOINT Professional Certifications</li>
             <li>Docker Foundations Professional</li>
         </ul>

@@ -589,7 +589,7 @@ of drifting away from it. Requires Pillow, run by hand, never part of the gate.
 
 It is a JPEG even though issue #19 asked for a PNG. The card is a photograph: lossless PNG at
 1200x630 lands near a megabyte, five times the 200 KB budget the same issue sets, and quantizing
-to fit bands the sky and the water. Every unfurler accepts JPEG. It ships at 174.7 KB, and
+to fit bands the sky and the water. Every unfurler accepts JPEG. It ships at 175.0 KB, and
 `verify_seo_a11y.py` asserts the dimensions and the budget, so any replacement has to hold both.
 The page sets Lato, which is fetched from Google Fonts and is not on disk, so the script falls
 back through Open Sans, Liberation Sans, and DejaVu Sans; the card is generated once and
