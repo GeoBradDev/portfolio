@@ -32,6 +32,17 @@ standard library only, so it expects ordinary block style: two-space indents,
 them. It fails closed on anything else, such as flow-style triggers, a
 quoted job id, or a zero-indented sequence (`steps:` with `- name:` at the
 same indent), rather than guessing.
+
+Issue 31 retired jQuery, Bootstrap, and Font Awesome and changed three checks.
+check_no_end_of_life_library replaced the jQuery version floor: every script a
+page loads is under js/, every stylesheet (and every as=style preload) is
+under css/ or from Google Fonts, and nothing names a retired library.
+check_css_imports_are_first_party holds the same line inside the
+stylesheets, for @import and url(). check_icons_are_inline_svg replaced the
+single-Font-Awesome-version check: no Font Awesome stylesheet or class
+anywhere, and every icon a page or the portfolio renderer draws resolves to a
+<symbol> on that page. Markup is read with html.parser, so attribute quoting
+and rel token order cannot hide a tag.
 """
 
 import json
@@ -40,6 +51,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,14 +107,88 @@ def read_or_fail(path):
     return text
 
 
-# The libraries issue 31 retired: jQuery 3.x, Bootstrap 3.x, Font Awesome 4.x.
-# All three are end of life, and jQuery stayed on 3.x only because Bootstrap 3
-# could not run on 4. A src or href naming any of them is one coming back.
-RETIRED_LIBRARIES = re.compile(r"jquery|bootstrap|font-?awesome", re.I)
+# The libraries issue 31 retired: jQuery 3.x, Bootstrap 3.x (with its
+# Glyphicons font), and Font Awesome 4.x. All are end of life, and jQuery
+# stayed on 3.x only because Bootstrap 3 could not run on 4. A src, href, or
+# url() naming any of them is one coming back.
+RETIRED_LIBRARIES = re.compile(r"jquery|bootstrap|font-?awesome|glyphicons?", re.I)
 
-# The only third-party origin a page may pull a stylesheet from. Google Fonts
-# serves a font, not a runtime library.
+# The only third-party origins a stylesheet may come from. Google Fonts serves
+# a font, not a runtime library: the CSS from fonts.googleapis.com and the font
+# files that CSS names from fonts.gstatic.com.
 STYLESHEET_HOSTS = ("https://fonts.googleapis.com/",)
+FONT_FILE_HOSTS = ("https://fonts.googleapis.com/", "https://fonts.gstatic.com/")
+
+# A first-party path: relative, or root-absolute, with no scheme and no
+# protocol-relative // host.
+FIRST_PARTY_SCRIPT = re.compile(r"/?js/[\w./-]+\.js")
+FIRST_PARTY_SHEET = re.compile(r"/?css/[\w./-]+\.css")
+
+
+class PageAssets(HTMLParser):
+    """What a page loads and draws, read by a real parser.
+
+    The regexes this replaced matched only double-quoted attributes and an
+    exact rel="stylesheet", so src='...', rel=stylesheet, rel="preload
+    stylesheet", and an as=style preload all walked past them. html.parser
+    hands back attribute values whatever their quoting, and rel is read as
+    the space-separated token list it is.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.scripts = []      # src of every <script src>
+        self.sheets = []       # href of every stylesheet link or style preload
+        self.preloads = []     # (as, href) of every other preload
+        self.styles = []       # body of every inline <style>
+        self.uses = []         # fragment of every <use href> or xlink:href
+        self.symbols = set()   # id of every <symbol>
+        self.classes = []      # every class token
+        self.links = []        # href of every <link>, whatever its rel
+        self._in_style = False
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        self.classes.extend(attr.get("class", "").split())
+        if tag == "script" and "src" in attr:
+            self.scripts.append(attr["src"].strip())
+        elif tag == "link":
+            rel = attr.get("rel", "").lower().split()
+            href = attr.get("href", "").strip()
+            self.links.append(href)
+            kind = attr.get("as", "").strip().lower()
+            if "stylesheet" in rel or ({"preload", "prefetch"} & set(rel) and kind == "style"):
+                self.sheets.append(href)
+            elif {"preload", "modulepreload", "prefetch"} & set(rel):
+                self.preloads.append((kind, href))
+        elif tag == "style":
+            self._in_style = True
+            self.styles.append("")
+        elif tag == "use":
+            href = attr.get("href") or attr.get("xlink:href") or ""
+            self.uses.append(href.strip())
+        elif tag == "symbol" and attr.get("id"):
+            self.symbols.add(attr["id"])
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag == "style":
+            self._in_style = False
+
+    def handle_endtag(self, tag):
+        if tag == "style":
+            self._in_style = False
+
+    def handle_data(self, data):
+        if self._in_style:
+            self.styles[-1] += data
+
+
+def page_assets(source):
+    parser = PageAssets()
+    parser.feed(_without_html_comments(source))
+    parser.close()
+    return parser
 
 
 def check_no_end_of_life_library():
@@ -112,9 +198,11 @@ def check_no_end_of_life_library():
     cross-checked the version against CLAUDE.md. Issue 31 removed jQuery,
     Bootstrap, and Font Awesome, so there is no version left to floor or to
     document. What keeps a library from coming back unnoticed is now an
-    allowlist: a <script src> must be a path under js/, a stylesheet must be
-    under css/ or come from Google Fonts, and no src or href may name one of
-    the three retired libraries, wherever it is hosted.
+    allowlist: a <script src> must be a path under js/, a stylesheet (a link
+    whose rel includes stylesheet, or a preload with as=style) must be under
+    css/ or come from Google Fonts, a script preload must be under js/, and
+    no src or href may name one of the retired libraries, wherever it is
+    hosted.
     """
     print("\nNo page loads a third-party or end-of-life library")
 
@@ -125,25 +213,19 @@ def check_no_end_of_life_library():
         if source is None:
             continue
         name = path.name
-        source = re.sub(r"<!--.*?-->", "", source, flags=re.S)
+        assets = page_assets(source)
 
-        scripts = re.findall(r'<script\b[^>]*\bsrc\s*=\s*"([^"]*)"', source, re.I)
-        foreign = [src for src in scripts if not re.fullmatch(r"js/[\w./-]+\.js", src)]
+        scripts = assets.scripts + [href for kind, href in assets.preloads if kind == "script"]
+        foreign = [src for src in scripts if not FIRST_PARTY_SCRIPT.fullmatch(src)]
         check(
             not foreign,
             "%s loads scripts only from js/%s"
             % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
         )
 
-        sheets = []
-        for tag in re.findall(r"<link\b[^>]*>", source, re.I):
-            if re.search(r'\brel\s*=\s*"stylesheet"', tag, re.I):
-                href = re.search(r'\bhref\s*=\s*"([^"]*)"', tag, re.I)
-                sheets.append(href.group(1) if href else "")
         foreign = [
-            href for href in sheets
-            if not re.fullmatch(r"css/[\w./-]+\.css", href)
-            and not href.startswith(STYLESHEET_HOSTS)
+            href for href in assets.sheets
+            if not FIRST_PARTY_SHEET.fullmatch(href) and not href.startswith(STYLESHEET_HOSTS)
         ]
         check(
             not foreign,
@@ -151,11 +233,81 @@ def check_no_end_of_life_library():
             % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
         )
 
-        retired = [ref for ref in scripts + sheets if RETIRED_LIBRARIES.search(ref)]
+        everything = scripts + assets.sheets + [href for _, href in assets.preloads]
+        retired = [ref for ref in everything if RETIRED_LIBRARIES.search(ref)]
         check(
             not retired,
-            "%s loads no jQuery, Bootstrap, or Font Awesome%s"
+            "%s loads no jQuery, Bootstrap, Glyphicons, or Font Awesome%s"
             % (name, " (loads %s)" % ", ".join(retired) if retired else ""),
+        )
+
+
+def _css_imports_and_urls(css):
+    """(every @import target, every url() value) in a stylesheet, comments out.
+
+    url() is read quote-aware, so the card grain's data: SVG, which carries
+    url(%23grain) inside its own quoted value, is one value and not two.
+    """
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    value = r"""url\(\s*(?:(['"])(.*?)\1|([^'")\s]*))\s*\)|(['"])(.*?)\4"""
+    imports = []
+    for match in re.finditer(r"@import\s+(?:" + value + r")", css, re.S | re.I):
+        imports.append(match.group(2) or match.group(3) or match.group(5) or "")
+    urls = []
+    for match in re.finditer(r"""url\(\s*(?:(['"])(.*?)\1|([^'")\s]*))\s*\)""", css, re.S | re.I):
+        urls.append((match.group(2) if match.group(1) else match.group(3)) or "")
+    return imports, urls
+
+
+def check_css_imports_are_first_party():
+    """A stylesheet cannot pull in what the pages may not link.
+
+    check_no_end_of_life_library reads the markup, and an @import at the top
+    of css/style.css loads Bootstrap from a CDN without any page changing.
+    So every stylesheet a page uses, its linked local files and its inline
+    <style> blocks, may @import only from Google Fonts, and every url() in
+    them is first-party, a data: URI (the portfolio grain is one), or a
+    Google Fonts host, and names no retired library.
+    """
+    print("\nStylesheets import nothing third-party and name no retired library")
+
+    sheets = {}
+    for path in HTML_PAGES:
+        source = read(path)
+        if source is None:
+            continue
+        assets = page_assets(source)
+        for number, body in enumerate(assets.styles, start=1):
+            sheets["%s inline <style> %d" % (path.name, number)] = body
+        for href in assets.sheets:
+            if FIRST_PARTY_SHEET.fullmatch(href):
+                local = ROOT / href.lstrip("/")
+                text = read(local)
+                if text is not None:
+                    sheets[href.lstrip("/")] = text
+    text = read(STYLE_CSS)
+    if check(text is not None, "css/style.css exists"):
+        sheets["css/style.css"] = text
+
+    for label, css in sorted(sheets.items()):
+        imports, urls = _css_imports_and_urls(css)
+        bad_imports = [ref for ref in imports if not ref.startswith(STYLESHEET_HOSTS)]
+        check(
+            not bad_imports,
+            "%s imports only from Google Fonts%s"
+            % (label, " (imports %s)" % ", ".join(bad_imports) if bad_imports else ""),
+        )
+        foreign = []
+        for ref in urls:
+            if ref.startswith("data:"):
+                continue
+            third_party = re.match(r"[a-z][a-z0-9+.-]*:|//", ref, re.I) is not None
+            if (third_party and not ref.startswith(FONT_FILE_HOSTS)) or RETIRED_LIBRARIES.search(ref):
+                foreign.append(ref)
+        check(
+            not foreign,
+            "%s has no third-party or retired-library url()%s"
+            % (label, " (found %s)" % ", ".join(foreign) if foreign else ""),
         )
 
 
@@ -378,17 +530,15 @@ def check_icons_are_inline_svg():
         pages[path.name] = _without_html_comments(source)
 
     for name, source in pages.items():
+        assets = page_assets(source)
         check(
             "cdnjs.cloudflare.com" not in source,
             "%s loads no asset from cdnjs" % name,
         )
-        links = re.findall(r"<link\b[^>]*>", source, re.I)
-        fa_links = [tag for tag in links if re.search(r"font-?awesome", tag, re.I)]
+        fa_links = [href for href in assets.links if re.search(r"font-?awesome", href, re.I)]
         check(not fa_links, "%s links no Font Awesome stylesheet" % name)
 
-        classes = []
-        for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
-            classes.extend(token for token in value.split() if _is_font_awesome_class(token))
+        classes = [token for token in assets.classes if _is_font_awesome_class(token)]
         # The renderer sets classes from string literals, which the markup
         # scan above never sees: el("i", "fa fa-star") was exactly that.
         for body in _inline_script_bodies(source):
@@ -405,9 +555,17 @@ def check_icons_are_inline_svg():
             % (name, " (found %s)" % ", ".join(sorted(set(classes))) if classes else ""),
         )
 
-        symbols = set(re.findall(r'<symbol\b[^>]*\bid\s*=\s*"([^"]+)"', source))
-        used = re.findall(r'<use\b[^>]*\b(?:xlink:)?href\s*=\s*"#([^"]+)"', source)
-        missing = sorted(set(used) - symbols)
+        # Read by the parser, so href='#x', href=#x, and xlink:href all count.
+        # A <use> must name a symbol on its own page: an external sprite file
+        # is a request of its own, and not what this site ships.
+        external = [href for href in assets.uses if not href.startswith("#")]
+        check(
+            not external,
+            "%s: every <use> points into the same page%s"
+            % (name, " (not: %s)" % ", ".join(external) if external else ""),
+        )
+        used = [href[1:] for href in assets.uses if href.startswith("#")]
+        missing = sorted(set(used) - assets.symbols)
         check(
             not missing,
             "%s: every <use> resolves to a <symbol> on the same page%s"
@@ -421,8 +579,26 @@ def check_icons_are_inline_svg():
     index = pages.get("index.html")
     if index is not None:
         script = "\n".join(_inline_script_bodies(index))
-        symbols = set(re.findall(r'<symbol\b[^>]*\bid\s*=\s*"([^"]+)"', index))
-        asked = re.findall(r"\bicon\(\s*[\"']([\w-]+)[\"']\s*\)", script)
+        symbols = page_assets(index).symbols
+        # Every call, not every literal call: icon(name) with a variable can
+        # name anything, and only a literal can be resolved here. The helper's
+        # own definition is not a call.
+        calls = [
+            match for match in re.finditer(r"\bicon\s*\(", script)
+            if not re.search(r"function\s+$", script[:match.start()])
+        ]
+        asked, unresolvable = [], []
+        for match in calls:
+            literal = re.match(r"""\s*(["'])([\w-]+)\1\s*\)""", script[match.end():])
+            if literal:
+                asked.append(literal.group(2))
+            else:
+                unresolvable.append(script[match.start():match.end() + 20].split("\n")[0])
+        check(
+            not unresolvable,
+            "every icon() call in the renderer names its icon with a string literal%s"
+            % (" (not: %s)" % "; ".join(unresolvable) if unresolvable else ""),
+        )
         if check(bool(asked), "the portfolio renderer draws its icons with icon(name)"):
             missing = sorted(set("icon-" + name for name in asked) - symbols)
             check(
@@ -796,6 +972,7 @@ def check_ci_workflow():
 
 def main():
     check_no_end_of_life_library()
+    check_css_imports_are_first_party()
     check_no_unescaped_interpolation()
     check_repo_urls_are_scheme_validated()
     check_no_plain_http_assets()
