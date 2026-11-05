@@ -252,19 +252,22 @@ def check_native_smooth_scroll(css, js):
         )
 
     js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
-    for token, reason in (
-        ("scrollTo(", "scrolling is native now"),
-        ("scrollBy(", "scrolling is native now"),
-        ("scrollIntoView(", "scrolling is native now"),
-        ("scrollTop =", "assigning scrollTop is a scripted scroll; scrolling is native now"),
-        ("preventDefault", "cancelling a click stops the native fragment navigation and its hash update"),
+    # Patterns, not literal strings: `scrollTop=0`, `scrollTop += 1`,
+    # `window.scroll(0, 0)`, and `scrollBy (0, 1)` are all scripted scrolls.
+    for pattern, label, reason in (
+        (r"\bscroll(?:To|By)?\s*\(", "scroll(), scrollTo(), or scrollBy()", "scrolling is native now"),
+        (r"\bscrollIntoView\s*\(", "scrollIntoView()", "scrolling is native now"),
+        (r"\bscroll(?:Top|Left)\s*(?:[-+*/]?=)(?!=)", "an assignment to scrollTop or scrollLeft",
+         "assigning a scroll offset is a scripted scroll; scrolling is native now"),
+        (r"\bpreventDefault\b", "preventDefault",
+         "cancelling a click stops the native fragment navigation and its hash update"),
     ):
-        if token in js_code:
-            fail("js/main.js contains %r: %s." % (token, reason))
+        if re.search(pattern, js_code):
+            fail("js/main.js contains %s: %s." % (label, reason))
 
 
 def check_nav_targets(facts):
-    """ChangeClass() only sees sections carrying one-page-section."""
+    """changeActiveNavLink() only sees sections carrying one-page-section."""
     for target in facts.nav_targets:
         classes = facts.ids.get(target)
         if classes is None:
@@ -320,6 +323,56 @@ def check_deep_link_is_not_animated(css, js):
                 "css/style.css gates smooth scrolling on html.%s, but js/main.js "
                 "never adds that class to the root element, so nav links jump." % name
             )
+
+
+def named_function_spans(js):
+    """(name, start, end) of every `function name(...) { ... }` body in js."""
+    spans = []
+    for match in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{", js):
+        depth, index = 1, match.end()
+        while depth and index < len(js):
+            if js[index] == "{":
+                depth += 1
+            elif js[index] == "}":
+                depth -= 1
+            index += 1
+        spans.append((match.group(1), match.end(), index))
+    return spans
+
+
+def check_smooth_scroll_starts_on_load(css, js):
+    """The smooth-scroll class is added from the load path, not during init.
+
+    check_deep_link_is_not_animated requires smooth scrolling to be keyed on
+    a class main.js adds. Adding it while main.js initializes, which runs
+    before the portfolio cards and the webfont arrive, would bring back the
+    deep-link bug that check exists for. So every place main.js adds that
+    class must sit inside a named function that main.js registers as a load
+    listener (addEventListener("load", name)).
+    """
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    classes = set(re.findall(r"html\.([\w-]+)\s*\{[^}]*scroll-behavior\s*:\s*smooth", css_code))
+    spans = named_function_spans(js_code)
+    for name in sorted(classes):
+        adds = list(re.finditer(
+            r"document\.documentElement\.classList\.add\(\s*([\"'])%s\1\s*\)" % re.escape(name),
+            js_code,
+        ))
+        for add in adds:
+            enclosing = [span for span in spans if span[1] <= add.start() < span[2]]
+            innermost = min(enclosing, key=lambda span: span[2] - span[1]) if enclosing else None
+            registered = innermost is not None and re.search(
+                r"addEventListener\(\s*([\"'])load\1\s*,\s*%s\s*\)" % re.escape(innermost[0]),
+                js_code,
+            )
+            if not registered:
+                fail(
+                    "js/main.js adds the %s class outside a function it registers "
+                    "for the load event (%s), so smooth scrolling can start before "
+                    "the page has settled and a deep link animates short of its "
+                    "section." % (name, "in %s()" % innermost[0] if innermost else "at top level")
+                )
 
 
 def css_rules(css, media=()):
@@ -535,6 +588,7 @@ def main():
     check_native_smooth_scroll(css, js)
     check_deep_link_is_not_animated(css, js)
     check_collapse_covers_every_width(css)
+    check_smooth_scroll_starts_on_load(css, js)
     check_nav_targets(facts)
     check_progress_bars(facts)
     check_card_handler(html, css)
