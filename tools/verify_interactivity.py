@@ -852,6 +852,13 @@ def css_rules(css, media=()):
 
     A small brace walker, enough for this stylesheet: it descends into any
     at-rule block and records the prelude of each @media it passes through.
+
+    A statement at-rule ends at a semicolon and has no block: `@import
+    url(x.css);`, `@charset "utf-8";`, `@layer a, b;`. Without the split
+    below it was read as the start of the next rule's prelude, which then
+    began with "@", so that rule's declarations were walked as nested CSS
+    and lost (found in review of issue 32). Only the text after the last
+    semicolon before a brace is the prelude.
     """
     rules = []
     index = 0
@@ -859,7 +866,7 @@ def css_rules(css, media=()):
         brace = css.find("{", index)
         if brace == -1:
             break
-        prelude = css[index:brace].strip()
+        prelude = css[index:brace].rsplit(";", 1)[-1].strip()
         depth, end = 1, brace + 1
         while depth and end < len(css):
             if css[end] == "{":
@@ -1091,10 +1098,11 @@ def offsets(decls):
 def covers_viewport(decls):
     """True when one block pins an element over the whole viewport.
 
-    Fixed, and spanning it both ways. Across: a width or min-width that is
-    full (see is_full), or zero offsets on both the left and the right.
-    Down: a height or min-height that is full, or zero offsets top and
-    bottom. Offsets come from the longhands, inset, inset-block and
+    Fixed, and spanning it both ways. Across: a width, min-width,
+    inline-size or min-inline-size that is full (see is_full), or zero
+    offsets on both the left and the right. Down: a height, min-height,
+    block-size or min-block-size that is full, or zero offsets top and
+    bottom. Logical sizes are read in horizontal writing mode. Offsets come from the longhands, inset, inset-block and
     inset-inline (see offsets).
 
     A block that hides the element in the same breath is a closed modal or
@@ -1120,13 +1128,13 @@ def covers_viewport(decls):
         return any(is_zero(value) for value in sides[side])
 
     across = (
-        is_full(decls.get("width"), "x")
-        or is_full(decls.get("min-width"), "x")
+        any(is_full(decls.get(prop), "x")
+            for prop in ("width", "min-width", "inline-size", "min-inline-size"))
         or (zero("left") and zero("right"))
     )
     down = (
-        is_full(decls.get("height"), "y")
-        or is_full(decls.get("min-height"), "y")
+        any(is_full(decls.get(prop), "y")
+            for prop in ("height", "min-height", "block-size", "min-block-size"))
         or (zero("top") and zero("bottom"))
     )
     return across and down
@@ -1168,8 +1176,10 @@ def check_no_script_removed_overlay(css, js):
     rule and shown by a class.
 
     Known limits: an overlay built entirely by script, one whose coverage is
-    split across several rules, and one sized with calc() or another CSS
-    function are not caught. Drive that in a browser.
+    split across several rules, one sized with calc() or another CSS
+    function, and one written as a nested CSS rule inside another style
+    rule (`.p { .o { position: fixed; inset: 0 } }`, which css_rules does
+    not descend into) are not caught. Drive that in a browser.
     """
     why = (
         "With JavaScript off nothing ever removes it, so the page stays "
@@ -1209,7 +1219,9 @@ def check_no_script_removed_overlay(css, js):
             ))
 
         for style in html_attribute("style", markup):
-            if covers_viewport(declarations(style)):
+            # Comments are legal inside a style attribute and would
+            # otherwise glue themselves onto the next property name.
+            if covers_viewport(declarations(re.sub(r"/\*.*?\*/", "", style, flags=re.S))):
                 fail(
                     "%s: an element with style=%r is position: fixed over "
                     "the whole viewport. %s" % (page.name, style, why)

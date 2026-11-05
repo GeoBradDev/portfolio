@@ -132,10 +132,13 @@ Made checkable:
    - General: for every rule `css_rules()` returns from `css/style.css` and from every
      `<style>` block (so rules inside `@media` and `@supports` count), and for every `style`
      attribute on every page, a declaration block that sets `position: fixed` and covers
-     the viewport horizontally (`width` or `min-width` of 100% or more, 100vw or more, or
-     100vmax or more; or zero left and right offsets) and vertically (`height` or
-     `min-height` of 100% or more, 100vh or more, or 100vmax or more; or zero top and
-     bottom offsets) fails. Offsets are read from the longhands, the `inset` shorthand
+     the viewport horizontally (`width`, `min-width`, `inline-size` or `min-inline-size` of
+     100% or more, 100vw or more, or 100vmax or more; or zero left and right offsets) and
+     vertically (`height`, `min-height`, `block-size` or `min-block-size` of 100% or more,
+     100vh or more, or 100vmax or more; or zero top and bottom offsets) fails. A `style`
+     attribute has its `/* */` comments stripped before it is read, and `css_rules()` skips
+     statement at-rules ending in `;` (`@import`, `@charset`, `@layer a, b;`) so the rule
+     after one is still read. Offsets are read from the longhands, the `inset` shorthand
      (one to four values), `inset-block` and `inset-inline` and their start and end
      longhands; any spelling of zero (`0`, `0px`, `.0`) counts. It passes only if the same
      block hides it: `display: none`, `visibility: hidden` or `collapse`, or `opacity: 0`
@@ -184,7 +187,9 @@ Made checkable:
   intended: such an element must be hidden in its own base rule and shown by a class, and
   the failure message says so. Known limits: an overlay created entirely by script, one
   whose coverage comes from a combination of rules, and one sized or offset with `calc()`,
-  `min()`, `max()`, `clamp()` or `var()` (values are read literally) are not caught.
+  `min()`, `max()`, `clamp()` or `var()` (values are read literally), and one written as a
+  nested CSS rule inside another style rule (`.p { .o { position: fixed; inset: 0 } }`;
+  `css_rules()` does not descend into style rules) are not caught.
   Stylesheets other than `css/style.css` linked from a page are not read.
 - Font swap. Without the overlay the first paint may show the fallback font before Lato
   arrives. Accepted: content in a fallback font beats no content, which is the issue's
@@ -214,6 +219,19 @@ is out of scope.
   style attribute on `404.html`, `<script data-src>`, and a 100vmin control) each give the
   expected PASS or FAIL, plus direct `covers_viewport` checks of the two- and three-value
   `inset` forms. The tree stays green with no production change.
+- Review round 2 tightening, under the same approval (stricter only, every assertion
+  stays): `css_rules()` merged a statement at-rule (`@import url(x.css);`) into the next
+  rule's prelude and dropped that rule, blinding both the cover scan and the `.loader-con`
+  selector scan; logical sizes (`block-size`, `inline-size` and their `min-` forms) were
+  not read; and a `/* */` comment inside a `style` attribute hid the property after it.
+  All three fixed. `css_rules()` returns the identical 302 rules for `css/style.css`, so
+  `check_collapse_covers_every_width` reads the same input. `scratchpad/issue32/red3.txt`:
+  the rewritten verifier alone at f8eda33 FAILs with the same 11 loader-only findings.
+  `scratchpad/issue32/mutations3.txt`: the 20 earlier mutations plus 7 new ones (`@import`,
+  `@charset`, `@layer` before a cover or a `.loader-con` selector, in `css/style.css` and
+  in a `<style>` block; logical sizes; a commented style attribute) and two guards on the
+  collapse check (hidden base moved into a max-width query FAILs; `@import` placed right
+  before the hidden base PASSes) all give the expected result.
 - AC1: `probe32.py` against the branch with JavaScript disabled at 375x812 and 1440x900:
   every target's `topHit` is true; viewport and full-page screenshots
   `after-nojs-{375,1440}.png` and `after-nojs-{375,1440}-full.png` show hero, about,
