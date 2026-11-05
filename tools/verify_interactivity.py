@@ -6,14 +6,24 @@ Standalone, standard library only, run by hand from the repo root:
     python3 tools/verify_interactivity.py
 
 Exits 0 when the issue #16 acceptance criteria still hold at the source
-level: index.html loads js/main.js after jQuery, every section a nav link
-points at takes part in active-link tracking, every skill bar carries a
-data-percent instead of a hardcoded inline width, the portfolio card click
-handler yields to real anchors, and js/main.js references nothing the
-markup does not contain.
+level: index.html loads js/main.js, every section a nav link points at takes
+part in active-link tracking, every skill bar carries a data-percent instead
+of a hardcoded inline width, the portfolio card click handler yields to real
+anchors, and js/main.js references nothing the markup does not contain.
+
+Issue #31 retired jQuery and Bootstrap's JavaScript. main.js is vanilla, so
+the check that it loads after jQuery became a check that no page loads
+either library, and three checks hold the pieces that replaced them: the
+mobile menu toggle is a plain <button> that states its own aria-expanded and
+aria-controls, smooth scrolling is the browser's own (CSS scroll-behavior,
+only when the visitor has not asked for reduced motion, plus a
+scroll-margin-top that clears the fixed header), and main.js neither calls a
+jQuery or Bootstrap API nor scrolls or cancels anything itself that would
+fight that native scroll.
 
 Behavior (does the navbar actually go sticky, does the bar actually
-animate) cannot be checked here. Drive that in a browser.
+animate, does a nav link land below the header) cannot be checked here.
+Drive that in a browser.
 """
 
 import re
@@ -25,6 +35,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX = ROOT / "index.html"
+# Every page at the repo root, for the one check that is about every page:
+# no page may load jQuery or Bootstrap. Same glob the other verifiers use.
+HTML_PAGES = sorted(ROOT.glob("*.html"))
 MAIN_JS = ROOT / "js" / "main.js"
 STYLE_CSS = ROOT / "css" / "style.css"
 
@@ -45,6 +58,11 @@ class IndexFacts(HTMLParser):
         self.nav_targets = []    # fragment of every <a class="scroll" href="#...">
         self.progress_bars = []  # (data-percent, style) per .progress-bar-line
         self.parallax = []       # tag name of every element with class "parallax"
+        self.toggles = []        # attrs of every element with class "navbar-toggle"
+        self.toggle_text = []    # text inside each toggle, by index
+        self.nav_lists = []      # id chain of the elements enclosing each ul.navbar-nav
+        self._open = []          # stack of (tag, id) for the containment test
+        self._in_toggle = None
 
     def handle_starttag(self, tag, attrs):
         attr = dict(attrs)
@@ -67,21 +85,180 @@ class IndexFacts(HTMLParser):
         if "parallax" in classes:
             self.parallax.append(tag)
 
+        if "navbar-toggle" in classes:
+            self.toggles.append(dict(attr, _tag=tag))
+            self.toggle_text.append("")
+            self._in_toggle = len(self.toggles) - 1
+
+        if tag == "ul" and "navbar-nav" in classes:
+            self.nav_lists.append([i for _, i in self._open if i])
+
+        if tag not in VOID:
+            self._open.append((tag, attr.get("id")))
+
+    def handle_endtag(self, tag):
+        if tag == "button" and self._in_toggle is not None:
+            self._in_toggle = None
+        # Unwind to the matching open tag, so one stray close tag cannot
+        # leave the whole stack shifted.
+        for depth in range(len(self._open) - 1, -1, -1):
+            if self._open[depth][0] == tag:
+                del self._open[depth:]
+                break
+
+    def handle_data(self, data):
+        if self._in_toggle is not None:
+            self.toggle_text[self._in_toggle] += data
+
+
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+        "meta", "source", "track", "wbr"}
+
 
 def check_script_tag(facts):
-    """main.js has to load, and it has to load after jQuery."""
+    """main.js has to load, and no page may load jQuery or Bootstrap.
+
+    Until issue 31 this asserted that main.js loaded after jQuery, because
+    main.js was jQuery code. It is vanilla now, so the ordering rule has
+    nothing left to order, and the risk turned around: a jQuery or Bootstrap
+    tag coming back is 127 KB of end-of-life library that nothing calls.
+    Every page is swept, not just index.html.
+    """
     if "js/main.js" not in facts.scripts:
         fail(
             "index.html does not load js/main.js. The tag was dropped in "
             "eba0f7b and every interaction in that file died with it."
         )
-        return
 
-    jquery = [i for i, src in enumerate(facts.scripts) if "jquery.min.js" in src]
-    if not jquery:
-        fail("index.html loads js/main.js but not jQuery; main.js is jQuery code.")
-    elif facts.scripts.index("js/main.js") < jquery[0]:
-        fail("js/main.js is loaded before jQuery, so it throws on load.")
+    for path in HTML_PAGES:
+        page = IndexFacts()
+        page.feed(path.read_text(encoding="utf-8", errors="replace"))
+        for src in page.scripts:
+            if re.search(r"jquery|bootstrap", src, re.I):
+                fail(
+                    "%s loads %s. jQuery and Bootstrap's JavaScript were "
+                    "retired in issue 31; main.js is vanilla and nothing "
+                    "calls either." % (path.name, src)
+                )
+
+
+def check_nav_toggle(facts):
+    """The mobile menu toggle is a plain button that states its own state.
+
+    Bootstrap's collapse plugin used to read data-toggle and data-target
+    and flip aria-expanded for it. With the plugin gone, the markup has to
+    carry the contract itself: a real <button type="button"> (a bare
+    <button> inside a form would submit it), aria-expanded starting at
+    "false" because the menu starts closed, and aria-controls naming the
+    element that holds the nav links, which is what a screen reader offers
+    to jump to. data-toggle and data-target are dead attributes now, and
+    leaving them suggests a plugin that is not there.
+    """
+    if len(facts.toggles) != 1:
+        fail("index.html has %d .navbar-toggle elements, expected exactly one." % len(facts.toggles))
+        return
+    toggle = facts.toggles[0]
+
+    if toggle["_tag"] != "button" or toggle.get("type") != "button":
+        fail('The nav toggle is not a <button type="button">.')
+    if toggle.get("aria-expanded") != "false":
+        fail(
+            'The nav toggle does not start at aria-expanded="false" (has %r).'
+            % toggle.get("aria-expanded")
+        )
+    for dead in ("data-toggle", "data-target"):
+        if dead in toggle:
+            fail("The nav toggle still carries %s, which only Bootstrap's JavaScript read." % dead)
+
+    controls = toggle.get("aria-controls")
+    if not controls:
+        fail("The nav toggle has no aria-controls.")
+    elif controls not in facts.ids:
+        fail("The nav toggle's aria-controls names #%s, which does not exist." % controls)
+    elif not facts.nav_lists or not all(controls in chain for chain in facts.nav_lists):
+        fail(
+            "The nav toggle's aria-controls names #%s, which does not wrap the "
+            "nav link list." % controls
+        )
+
+    named = (toggle.get("aria-label") or "").strip() or facts.toggle_text[0].strip()
+    if not named:
+        fail("The nav toggle has no accessible name.")
+
+
+def media_blocks(css, condition):
+    """(start, end) spans of every @media block whose prelude matches condition."""
+    spans = []
+    for match in re.finditer(r"@media[^{]*" + condition + r"[^{]*\{", css):
+        depth, index = 1, match.end()
+        while depth and index < len(css):
+            if css[index] == "{":
+                depth += 1
+            elif css[index] == "}":
+                depth -= 1
+            index += 1
+        spans.append((match.start(), index))
+    return spans
+
+
+def check_native_smooth_scroll(css, js):
+    """Smooth scrolling is the browser's, and nothing in main.js fights it.
+
+    jQuery's .animate() used to drive every nav link and the back-to-top
+    button, and subtracted the header height by hand. Issue 31 hands both
+    jobs to CSS: scroll-behavior: smooth on the root, and a scroll-margin-top
+    on each section so a fragment lands below the fixed header instead of
+    under it.
+
+    scroll-behavior has to sit inside @media (prefers-reduced-motion:
+    no-preference). Unconditional, it animates every jump for a visitor who
+    asked the OS for no motion, which the old code honored by passing a zero
+    duration.
+
+    And main.js must not scroll or cancel a click itself. A handler that
+    calls preventDefault on a nav link, or scrolls with scrollTo or by
+    assigning scrollTop, races the native scroll and loses the hash update
+    that native fragment navigation gives for free.
+    """
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    allowed = media_blocks(css_code, r"prefers-reduced-motion\s*:\s*no-preference")
+    smooth = [m.start() for m in re.finditer(r"scroll-behavior\s*:\s*smooth", css_code)]
+    if not smooth:
+        fail("css/style.css never sets scroll-behavior: smooth, so nav links jump.")
+    for position in smooth:
+        if not any(start < position < end for start, end in allowed):
+            fail(
+                "css/style.css sets scroll-behavior: smooth outside "
+                "@media (prefers-reduced-motion: no-preference), so it animates "
+                "for visitors who asked for reduced motion."
+            )
+        rule = css_code.rfind("{", 0, position)
+        opened = max(css_code.rfind("}", 0, rule), css_code.rfind("{", 0, rule))
+        selector = css_code[opened + 1:rule].strip()
+        if selector != "html":
+            fail("scroll-behavior: smooth is set on %r; it belongs on html alone." % selector)
+
+    margin = [
+        m for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css_code)
+        if any(part.strip() == ".one-page-section" for part in m.group(1).split(","))
+        and re.search(r"scroll-margin-top\s*:", m.group(2))
+    ]
+    if not margin:
+        fail(
+            ".one-page-section declares no scroll-margin-top, so a nav link "
+            "lands the section heading under the fixed header."
+        )
+
+    js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    for token, reason in (
+        ("scrollTo(", "scrolling is native now"),
+        ("scrollBy(", "scrolling is native now"),
+        ("scrollIntoView(", "scrolling is native now"),
+        ("scrollTop =", "assigning scrollTop is a scripted scroll; scrolling is native now"),
+        ("preventDefault", "cancelling a click stops the native fragment navigation and its hash update"),
+    ):
+        if token in js_code:
+            fail("js/main.js contains %r: %s." % (token, reason))
 
 
 def check_nav_targets(facts):
@@ -186,6 +363,13 @@ def check_no_dead_code(facts, js):
         ("mousewheel", "the mousewheel hijack was removed; it overrode native scrolling"),
         ("parallax", "the hero uses background-size: cover, so moving backgroundPosition exposes blank space"),
         ("progress-cont", "no .progress-cont span exists in the markup"),
+        # Issue 31: no library provides any of these any more.
+        ("jQuery", "jQuery was retired in issue 31 and no page loads it"),
+        ("$(", "jQuery was retired in issue 31 and no page loads it"),
+        ("$.", "jQuery was retired in issue 31 and no page loads it"),
+        (".collapse(", "Bootstrap's collapse plugin was retired in issue 31"),
+        (".animate(", "jQuery's .animate() was retired in issue 31; scrolling is native"),
+        (".fadeOut(", "jQuery's .fadeOut() was retired in issue 31"),
     ]
     for token, reason in banned:
         if token in js:
@@ -221,6 +405,8 @@ def main():
     facts.feed(html)
 
     check_script_tag(facts)
+    check_nav_toggle(facts)
+    check_native_smooth_scroll(css, js)
     check_nav_targets(facts)
     check_progress_bars(facts)
     check_card_handler(html, css)
