@@ -766,6 +766,14 @@ Navigation
     scroll-margin-top: 63px;
 }
 
+/* Each section is tabindex="-1" so a nav link moves focus into it (issue 33).
+   A focused section is a reading position, not a control: it is not in the
+   tab order, and its ring would outline a box several viewports tall, mostly
+   off screen. Every operable control keeps its :focus-visible ring. */
+.one-page-section:focus {
+    outline: none;
+}
+
 
 /*----------------------------------------
 Home

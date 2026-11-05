@@ -18,6 +18,8 @@
   smooth-scroll class, a frame after load (see onLoad below), so a deep
   link's first jump is instant. Nothing here may cancel a nav link's click
   or scroll the page itself, or it fights that and loses the hash update.
+  Focus is the browser's too: every section is tabindex="-1", and native
+  fragment navigation focuses a focusable target, so nothing here moves it.
 
 =========================================================================*/
 

@@ -196,7 +196,11 @@
 <!-- END MAIN NAVIGATION BAR -->
 
 <!-- HOME -->
-<section id="home" class="home-1 one-page-section">
+<!-- Every section an in-page link targets carries tabindex="-1" (issue 33). Native
+     fragment navigation focuses a focusable target, so the nav links, the chevron, and the
+     skip link move focus into the section they scroll to, and assistive technology follows.
+     -1 keeps the sections out of the tab order. css/style.css hides the ring on them. -->
+<section id="home" class="home-1 one-page-section" tabindex="-1">
     <div class="page-table">
         <div class="table-cell text-center">
             <div class="avatar-hero">
@@ -222,7 +226,7 @@
 <!-- END HOME -->
 
 <!-- ABOUT -->
-<section id="about" class="section one-page-section">
+<section id="about" class="section one-page-section" tabindex="-1">
     <div class="container">
         <div class="about-grid">
 
@@ -346,7 +350,7 @@
 <!-- END ABOUT -->
 
 <!-- SERVICES -->
-<section id="services" class="section one-page-section second-bg">
+<section id="services" class="section one-page-section second-bg" tabindex="-1">
     <div class="container">
         <div class="section-title">
             <h2>Services</h2>
@@ -444,7 +448,7 @@
 <!-- END SERVICES -->
 
 <!-- portfolio -->
-<section id="portfolio" class="section one-page-section">
+<section id="portfolio" class="section one-page-section" tabindex="-1">
     <div class="container">
         <div class="section-title">
             <h2>Portfolio</h2>
@@ -456,7 +460,7 @@
 <!-- END portfolio -->
 
 <!-- CONTACT -->
-<section id="contact" class="section one-page-section">
+<section id="contact" class="section one-page-section" tabindex="-1">
     <div class="container">
         <div class="section-title">
             <h2>Contact</h2>
