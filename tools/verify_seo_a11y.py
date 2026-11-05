@@ -1091,7 +1091,10 @@ def paints_ring(prop, value, body):
             if declared and invisible_color(declared[0]):
                 return False
         if prop == "outline-width":
-            return not all(ZERO_LENGTH.fullmatch(t) for t in tokens if is_length(t))
+            # Only an explicit zero length is zero. thin, medium, thick,
+            # var(), and calc() are all visible widths, so the declaration
+            # paints unless every token is a literal zero.
+            return not (tokens and all(is_length(t) and ZERO_LENGTH.fullmatch(t) for t in tokens))
         if {"none", "hidden"} & set(tokens):
             return False
         if any(invisible_color(t) for t in tokens):
@@ -1105,8 +1108,15 @@ def paints_ring(prop, value, body):
         parts = css_tokens(shadow.strip())
         if any(invisible_color(t) for t in parts):
             continue
+        # A var(), calc(), or other non-color function where a length goes
+        # is an unknown, so possibly nonzero, length: 0 0 0 var(--ring) red
+        # is a ring.
+        unknown = [
+            t for t in parts
+            if re.fullmatch(r"[a-z-]+\(.*\)", t) and t.split("(", 1)[0] not in COLOR_FUNCTIONS
+        ]
         lengths = [t for t in parts if is_length(t)]
-        if lengths and all(ZERO_LENGTH.fullmatch(t) for t in lengths):
+        if not unknown and lengths and all(ZERO_LENGTH.fullmatch(t) for t in lengths):
             continue
         return True
     return False
@@ -1260,17 +1270,31 @@ LOCAL_CLASSES = (
 )
 
 
-def js_expression(code, start, stops=",)"):
+CONTINUES_AFTER = set("+-*/%?:&|=,(<>!^~")
+CONTINUES_BEFORE = set("?:+-*/%&|.,=<>^")
+
+
+def js_expression(code, start, stops=",)", statement=False):
     """(text, end) of the JavaScript expression starting at code[start].
 
     It ends at the first character in stops that sits outside every bracket
     and string, so el(String("span"), a ? "b" : "c") splits into its two
     arguments correctly. Strings, template literals, and nested calls are
-    stepped over whole.
+    stepped over whole. Line breaks do not end it: a ternary or a
+    concatenation broken across lines, as Prettier writes them, is one
+    expression. With statement=True (the right side of an assignment), a
+    line break ends it only where the statement ends without a semicolon:
+    the line before does not end in an operator and the next does not start
+    with one.
     """
     depth, index, length = 0, start, len(code)
     while index < length:
         char = code[index]
+        if statement and char == "\n" and depth == 0:
+            before = code[start:index].rstrip()
+            after = code[index:].lstrip()
+            if before and after and before[-1] not in CONTINUES_AFTER and after[0] not in CONTINUES_BEFORE:
+                break
         if char in "\"'`":
             index = skip_js_string(code, index)
             continue
@@ -1311,12 +1335,24 @@ def string_parts(expression):
     strings inside its ${} parts, so a ternary, a concatenation, or a
     template yields every class name it can produce.
     """
-    parts, index, length = [], 0, len(expression)
+    parts, index, length, braces = [], 0, len(expression), 0
     while index < length:
         char = expression[index]
+        if char == "{":
+            braces += 1
+        elif char == "}":
+            braces = max(0, braces - 1)
         if char in "\"'":
             end = skip_js_string(expression, index)
-            parts.append(expression[index + 1:end - 1])
+            # An operand of a comparison is a value being tested, not a
+            # class: tag === "dropdown", "badge" !== kind. So is an object
+            # key, a literal followed by a colon inside braces.
+            before = expression[:index].rstrip()
+            after = expression[end:].lstrip()
+            compared = re.search(r"[=!]==?$", before) or re.match(r"[=!]==?", after)
+            keyed = braces > 0 and after.startswith(":")
+            if not (compared or keyed):
+                parts.append(expression[index + 1:end - 1])
             index = end
         elif char == "`":
             end = skip_js_string(expression, index)
@@ -1344,10 +1380,12 @@ def script_class_tokens(source):
     Only class-bearing positions, each read as a whole expression: the
     second argument of the renderer's el(tag, className, text), the right
     side of .className = or +=, every argument of classList.add, toggle, or
-    replace, the value argument of setAttribute("class", ...), and class
+    replace (only the first argument of toggle, whose second is the force
+    flag), the value argument of setAttribute("class", ...), and class
     attributes inside an HTML string. Every string piece of those
     expressions counts, so a ternary, a concatenation, or a template literal
-    cannot carry a class past the scan. Strings anywhere else are not read:
+    cannot carry a class past the scan, except the operands of a comparison
+    and object keys, which are tested values rather than classes. Strings anywhere else are not read:
     every word of every string used to count, which made card prose such as
     "works well" read as Bootstrap's .well class.
     """
@@ -1365,10 +1403,14 @@ def script_class_tokens(source):
                 expression, _ = js_expression(code, comma + 1)
                 add(expression)
         for match in re.finditer(r"\.className\s*\+?=(?!=)", code):
-            expression, _ = js_expression(code, match.end(), ";\n,)")
+            expression, _ = js_expression(code, match.end(), ";,)", statement=True)
             add(expression)
-        for match in re.finditer(r"\.classList\s*\.\s*(?:add|toggle|replace)\s*\(", code):
+        for match in re.finditer(r"\.classList\s*\.\s*(?:add|replace)\s*\(", code):
             expression, _ = js_expression(code, match.end(), ")")
+            add(expression)
+        # toggle's second argument is the force flag, not a class.
+        for match in re.finditer(r"\.classList\s*\.\s*toggle\s*\(", code):
+            expression, _ = js_expression(code, match.end())
             add(expression)
         for match in re.finditer(r"\.setAttribute\s*\(\s*([\"'])class\1\s*,", code):
             expression, _ = js_expression(code, match.end())
