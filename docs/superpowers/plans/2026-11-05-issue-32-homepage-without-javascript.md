@@ -119,18 +119,28 @@ Made checkable:
    `test: forbid an overlay only script removes (issue 32)`. Freeze it (honor the freeze;
    there is no edit-guard hook in this repo).
    The check has two parts:
-   - Narrow: with HTML comments stripped from `index.html`, no element carries the class
-     token `loader-con`, `double-bounce1`, or `double-bounce2`; with CSS comments stripped
-     from `css/style.css`, no selector names `.loader-con` or `.double-bounce` and no
-     `@keyframes sk-bounce` survives; neither `js/main.js` (through `strip_js_comments`) nor
-     the inline scripts of `index.html` contain the string `loader-con`.
-   - General: for every rule `css_rules()` returns from comment-stripped `css/style.css`
-     (so rules inside `@media` and `@supports` count), and for every `style` attribute in
-     `index.html`, a declaration block that sets `position: fixed` and covers the viewport
-     horizontally (`width: 100%` or `100vw`, or `left: 0` and `right: 0`, or `inset: 0`) and
-     vertically (`height: 100%` or `100vh`, or `top: 0` and `bottom: 0`, or `inset: 0`) fails
-     unless the same block hides it (`display: none`, `visibility: hidden`, or
-     `opacity: 0`). The message says that with JavaScript off nothing removes it, and
+   The page scan covers every page `HTML_PAGES` globs at the repo root (comments
+   stripped): its markup, its `style` attributes, its `<style>` blocks, and its inline
+   scripts. Attributes are read double-quoted, single-quoted, or unquoted, and `data-class`
+   or `data-src` do not count as `class` or `src`. (Tightened after review round 1; the
+   first version read `index.html` only, quoted attributes only, and no `<style>` blocks.)
+   - Narrow: no element on any page carries the class token `loader-con`,
+     `double-bounce1`, or `double-bounce2`; no selector in comment-stripped `css/style.css`
+     or in any page's `<style>` block names `.loader-con` or `.double-bounce`, and no
+     `@keyframes sk-bounce` survives in either; neither `js/main.js` (through
+     `strip_js_comments`) nor any inline script on any page contains `loader-con`.
+   - General: for every rule `css_rules()` returns from `css/style.css` and from every
+     `<style>` block (so rules inside `@media` and `@supports` count), and for every `style`
+     attribute on every page, a declaration block that sets `position: fixed` and covers
+     the viewport horizontally (`width` or `min-width` of 100% or more, 100vw or more, or
+     100vmax or more; or zero left and right offsets) and vertically (`height` or
+     `min-height` of 100% or more, 100vh or more, or 100vmax or more; or zero top and
+     bottom offsets) fails. Offsets are read from the longhands, the `inset` shorthand
+     (one to four values), `inset-block` and `inset-inline` and their start and end
+     longhands; any spelling of zero (`0`, `0px`, `.0`) counts. It passes only if the same
+     block hides it: `display: none`, `visibility: hidden` or `collapse`, or `opacity: 0`
+     together with `pointer-events: none` (`opacity: 0` alone is still hit-testable and
+     takes every click). The message says that with JavaScript off nothing removes it, and
      points at issue 32. `.nav-wrapper` (full width, no height) and `.scroll-up` (46px)
      must not trip it, and neither may the open mobile menu or any other existing rule at
      375 or 1440: the red run must name only the loader (`.loader-con` and its pieces).
@@ -172,9 +182,10 @@ Made checkable:
 - Over-broad check. The general rule could flag a legitimate future full-screen element
   that script opens (a modal or menu) when its hidden state lives in another rule. That is
   intended: such an element must be hidden in its own base rule and shown by a class, and
-  the failure message says so. Known limit: the check reads `css/style.css` and
-  `index.html` inline styles only; an overlay created entirely by script, or one whose
-  coverage comes from a combination of rules, is not caught.
+  the failure message says so. Known limits: an overlay created entirely by script, one
+  whose coverage comes from a combination of rules, and one sized or offset with `calc()`,
+  `min()`, `max()`, `clamp()` or `var()` (values are read literally) are not caught.
+  Stylesheets other than `css/style.css` linked from a page are not read.
 - Font swap. Without the overlay the first paint may show the fallback font before Lato
   arrives. Accepted: content in a fallback font beats no content, which is the issue's
   point.
@@ -190,6 +201,19 @@ is out of scope.
   naming the `.loader-con` markup, selector, keyframes, script references, and the
   fixed full-viewport rule); the mutation runs from Order of work step 4; all six
   verifiers PASS after the fix, output captured per verifier.
+- Review round 1 tightening: the frozen check was rewritten after review found a real
+  false negative (`position: fixed; inset: 0; opacity: 0` passed while still taking every
+  click with JavaScript off) plus missed coverage idioms and HTML scan gaps. The
+  orchestrator approved the rewrite on the owner's behalf because it only makes the check
+  stricter; every original assertion stays. `scratchpad/issue32/red2.txt`: the rewritten
+  verifier alone, applied to a scratch worktree at f8eda33, FAILs with the same 11
+  findings as `red.txt`, all of them the loader. `scratchpad/issue32/mutations2.txt`: the
+  original 7 mutations plus 13 new ones (opacity 0 with and without `pointer-events:
+  none`, `min-height: 100vh`, `min-width`/`min-height: 100%`, `inset-block`/`inset-inline`,
+  200%, 100vmax, `opacity: .0`, unquoted `class=`, a `<style>` block in `index.html`, a
+  style attribute on `404.html`, `<script data-src>`, and a 100vmin control) each give the
+  expected PASS or FAIL, plus direct `covers_viewport` checks of the two- and three-value
+  `inset` forms. The tree stays green with no production change.
 - AC1: `probe32.py` against the branch with JavaScript disabled at 375x812 and 1440x900:
   every target's `topHit` is true; viewport and full-page screenshots
   `after-nojs-{375,1440}.png` and `after-nojs-{375,1440}-full.png` show hero, about,
