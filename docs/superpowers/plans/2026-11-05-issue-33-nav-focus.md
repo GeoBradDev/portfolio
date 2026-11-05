@@ -139,10 +139,15 @@ Added in Phase 1, from the issue's screen reader paragraph and the orchestrator'
    listener that selects `a[href^="#"]`, sets `tabindex="-1"`, and removes it again; and
    when the last on-screen `.one-page-section:focus` rule stops leaving the outline hidden
    (including `outline-style` or `outline-width` undoing it, or a visible outline under a
-   non-print `@media`, or an `!important` ring outranking a later normal `outline: none`);
-   when any element's `tabindex` parses, by HTML's rules for parsing integers (so `"1a"` is
-   1 and `" 0"` is 0), to 0 or more; and when `js/main.js` has no `hashchange` or `popstate`
-   listener that blurs the section or removes its `tabindex`.
+   non-print `@media`, an `!important` ring outranking a later normal `outline: none`, or
+   `outline-style: hidden`, which is not a valid outline-style value, so Chromium drops it
+   and paints the UA ring); when any element's `tabindex` parses, by HTML's rules for
+   parsing integers (ASCII digits only, so `"1a"` is 1, `" 0"` is 0, and a bare attribute or
+   an Arabic-Indic digit is no value), to 0 or more; when a target section carries any
+   `tabindex` attribute at all, bare included, since `hasAttribute("tabindex")` makes the
+   click listener skip it; and when `js/main.js` has no listener on `window` for
+   `hashchange` or `popstate` (`addEventListener` or the `on` property) that blurs the
+   section or removes its `tabindex`. Both events fire on `window` only.
 10. After focus leaves a section a link moved it into, the section carries no `tabindex`;
     a modified (ctrl) click on a nav link adds none; and a mouse click on non-control
     content followed by Tab behaves exactly as on `main` (probe2.py, six rows).
@@ -265,6 +270,56 @@ FAIL: 6 check(s) failed
   - #portfolio carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
   - #contact carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
   - js/main.js has no click listener on document that selects the activated fragment link with closest('a[href^="#"]') and sets tabindex="-1" on its target, so a nav link scrolls but leaves focus on <body>.
+```
+
+### Round 3 review: verifier defects
+
+Three verifier-only defects; the page code was already correct, so each was shown red on a
+scratch copy of 2c03e79 with one mutation or control at a time (`.../scratchpad/issue33/r4muts.sh`).
+R1, R2 and R4 are mutations that must fail. R3, R5 and R6 are controls that must pass.
+Verifier as of c092af0 (R1 and R4 pass when they must fail, R2 crashes, R3 and R5 fail when
+they must pass):
+
+```
+== R1 rule body outline-style: hidden: exit 0
+PASS: site interactivity is wired up
+== R2 bare tabindex on #about: exit 1
+Traceback (most recent call last):
+  File "/tmp/claude-1000/-home-bradstricherz-WebstormProjects-portfolio/d1665385-8056-4e41-b7d4-da502d9b6e32/scratchpad/issue33/mut/tools/verify_interactivity.py", line 1054, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/tmp/claude-1000/-home-bradstricherz-WebstormProjects-portfolio/d1665385-8056-4e41-b7d4-da502d9b6e32/scratchpad/issue33/mut/tools/verify_interactivity.py", line 1036, in main
+    check_link_targets_take_focus(facts, css, js)
+== R3 (control) Arabic-Indic one tabindex on a non-target div is no value: exit 1
+FAIL: 1 check(s) failed
+  - <div> carries tabindex="١", which puts it into the tab order.
+== R4 history listener on document: exit 0
+PASS: site interactivity is wired up
+== R5 (control) window.onhashchange = function with blur(): exit 1
+FAIL: 1 check(s) failed
+  - js/main.js has no hashchange or popstate listener that blurs a section it made focusable or removes its tabindex, so Back to an entry with no fragment leaves focus in the old section and the next Tab jumps back down 
+== R6 (control) popstate on window with single quotes: exit 0
+PASS: site interactivity is wired up
+```
+
+After the fix:
+
+```
+== R1 rule body outline-style: hidden: exit 1
+FAIL: 1 check(s) failed
+  - css/style.css does not leave the outline hidden on a focused .one-page-section (the last on-screen `.one-page-section:focus` rule must set outline: none), so a nav link paints a focus ring around the whole section it
+== R2 bare tabindex on #about: exit 1
+FAIL: 1 check(s) failed
+  - #about carries a static bare tabindex attribute. A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; even a value the browser ignores makes hasAttribute("tabindex"
+== R3 (control) Arabic-Indic one tabindex on a non-target div is no value: exit 0
+PASS: site interactivity is wired up
+== R4 history listener on document: exit 1
+FAIL: 1 check(s) failed
+  - js/main.js has no hashchange or popstate listener on window that blurs a section it made focusable or removes its tabindex, so Back to an entry with no fragment leaves focus in the old section and the next Tab jumps 
+== R5 (control) window.onhashchange = function with blur(): exit 0
+PASS: site interactivity is wired up
+== R6 (control) popstate on window with single quotes: exit 0
+PASS: site interactivity is wired up
 ```
 
 ## Approval

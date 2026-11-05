@@ -83,7 +83,10 @@ class IndexFacts(HTMLParser):
 
         if attr.get("id"):
             self.ids[attr["id"]] = classes
-            self.tabindex[attr["id"]] = attr.get("tabindex")
+            # A bare `tabindex` has the value None from HTMLParser; record it
+            # as "" so it still reads as present, which it is to
+            # hasAttribute("tabindex") and so to the click listener.
+            self.tabindex[attr["id"]] = (attr["tabindex"] or "") if "tabindex" in attr else None
 
         if "tabindex" in attr:
             self.tabindexes.append((tag, attr.get("id"), attr["tabindex"]))
@@ -370,7 +373,8 @@ def outline_declarations(body):
     state is 'hidden' or 'visible'. `outline: none; outline-style: solid`
     paints a ring, and so, for this check, does `outline: none;
     outline-width: 2px`: either one undoes the suppression the rule exists
-    for.
+    for. `hidden` is not a valid outline-style value: Chromium drops the
+    declaration and paints the UA ring, so it counts as visible here.
     """
     declarations = []
     for prop, value in re.findall(r"(?<![-\w])(outline(?:-style|-width)?)\s*:\s*([^;]+)", body):
@@ -379,7 +383,7 @@ def outline_declarations(body):
         if prop == "outline":
             state = "hidden" if value in ("none", "0", "0px") else "visible"
         elif prop == "outline-style":
-            state = "hidden" if value in ("none", "hidden") else "visible"
+            state = "hidden" if value == "none" else "visible"
         else:
             state = "hidden" if re.fullmatch(r"0(?:\.0+)?(?:px|r?em)?", value) else "visible"
         declarations.append((state, important))
@@ -422,9 +426,13 @@ def html_integer(value):
     Leading ASCII whitespace is skipped, one optional sign is read, then the
     digits; anything after them is ignored. So tabindex="1a" is 1 and
     tabindex=" 0" is 0, exactly as a browser reads them, and a value with no
-    leading integer is ignored by the browser and returns None here.
+    leading integer is ignored by the browser and returns None here. That
+    includes a bare attribute (value None) and non-ASCII digits such as an
+    Arabic-Indic one: the rules accept ASCII digits only.
     """
-    match = re.match(r"[\t\n\f\r ]*([-+]?)(\d+)", value)
+    if value is None:
+        return None
+    match = re.match(r"[\t\n\f\r ]*([-+]?)([0-9]+)", value)
     if match is None:
         return None
     number = int(match.group(2))
@@ -465,9 +473,11 @@ def check_link_targets_take_focus(facts, css, js):
     History traversal runs no click, and traversal to an entry with no
     fragment runs no focusing step either, so Back from #contact to the
     unhashed top of the page left focus in #contact and the next Tab jumped
-    back down to its first control. js/main.js therefore also listens for
-    hashchange or popstate and blurs (or strips the attribute from) a
-    section it made focusable that the new hash does not name.
+    back down to its first control. js/main.js therefore also listens on
+    window for hashchange or popstate (addEventListener, or the
+    onhashchange / onpopstate property) and blurs (or strips the attribute
+    from) a section it made focusable that the new hash does not name. Both
+    events fire on window only, so a listener on document does not count.
 
     The js/main.js assertions are presence checks, by this repo's
     convention: they prove the handler's pieces are there, not what they do.
@@ -485,10 +495,16 @@ def check_link_targets_take_focus(facts, css, js):
             )
         elif facts.tabindex.get(target) is not None:
             fail(
-                '#%s carries a static tabindex="%s". A mouse click or tap inside '
-                "the section then focuses it, and the next Tab restarts at its "
-                "first control; js/main.js adds the attribute only when a link "
-                "is activated." % (target, facts.tabindex[target])
+                "#%s carries a static %s. A mouse click or tap inside the section "
+                "then focuses it, and the next Tab restarts at its first control; "
+                "even a value the browser ignores makes hasAttribute(\"tabindex\") "
+                "true, so the click listener skips the section and focus never "
+                "moves. js/main.js adds the attribute only when a link is "
+                "activated." % (
+                    target,
+                    'tabindex="%s"' % facts.tabindex[target] if facts.tabindex[target]
+                    else "bare tabindex attribute",
+                )
             )
 
     for tag, element_id, value in facts.tabindexes:
@@ -525,16 +541,21 @@ def check_link_targets_take_focus(facts, css, js):
             "the mouse and touch Tab order regression."
         )
 
-    history = r"addEventListener\(\s*([\"'])(?:hashchange|popstate)\1\s*,\s*"
+    # hashchange and popstate fire on window only; a listener on document
+    # never runs.
+    history = (
+        r"(?<![\w$.])window\s*\.\s*(?:addEventListener\(\s*([\"'])(?:hashchange|popstate)\1\s*,"
+        r"|on(?:hashchange|popstate)\s*=(?!=))\s*"
+    )
     cleanups = [span for span in spans if span[0] is None and re.search(history + r"$", span[3])]
-    for name in re.findall(history + r"([A-Za-z_$][\w$]*)\s*[,)]", js_code):
+    for name in re.findall(history + r"([A-Za-z_$][\w$]*)\s*[,);]?", js_code):
         cleanups.extend(span for span in spans if span[0] == name[1])
     if not any(
         re.search(r"""\.blur\(\s*\)|removeAttribute\(\s*(["'])tabindex\1\s*\)""", js_code[span[1]:span[2]])
         for span in cleanups
     ):
         fail(
-            "js/main.js has no hashchange or popstate listener that blurs a "
+            "js/main.js has no hashchange or popstate listener on window that blurs a "
             "section it made focusable or removes its tabindex, so Back to an "
             "entry with no fragment leaves focus in the old section and the "
             "next Tab jumps back down to it."
