@@ -286,17 +286,20 @@ def check_contact_form_spacing_is_declared():
     30px to 0, and between the textarea and the button from 76px to 8px,
     measured in Chrome at 1280px against origin/main.
 
-    So the spacing now has to be declared. Three declarations carry it, and
-    this asserts each one exists rather than asserting a pixel value, which
-    keeps the check source-level: what it prevents is a future edit dropping
-    one and silently collapsing the form again.
+    So the spacing has to be declared, and this asserts each declaration
+    exists rather than a pixel value, which keeps the check source-level:
+    what it prevents is a future edit dropping one and silently collapsing
+    the form again.
 
-    A margin-top on .submit-btn would not work and is deliberately not what
-    is asserted. Every field sits in a floated grid column, so the button's
-    static position is the top of the form, and clear: both turns any
-    margin-top into clearance that absorbs it. The last float's bottom margin
-    is what the button actually clears past, which is why the pre-button gap
-    lives on textarea.input-field.
+    Issue 31 replaced the Bootstrap float columns with a CSS grid on the form
+    itself. The two gaps still live on the fields: .input-field's
+    margin-bottom spaces the name/email row from the textarea, and
+    textarea.input-field's spaces the textarea from the button. Each field
+    sits in a grid item, which contains its margins exactly as the floated
+    column did, so neither can collapse away. What used to put the button
+    below the fields was clear: both on .submit-btn, which has nothing to
+    clear now; the grid declaration on #contact-form is what places it, so
+    that is what is asserted in its place.
     """
     print("\nContact form spacing is declared, not emergent")
 
@@ -314,8 +317,9 @@ def check_contact_form_spacing_is_declared():
         "textarea.input-field declares the margin-bottom that spaces the button",
     )
     check(
-        re.search(r"(?<!-)clear\s*:", declarations(css, ".submit-btn")) is not None,
-        ".submit-btn declares clear, so it lands below the floated columns",
+        re.search(r"(?<!-)display\s*:\s*grid\b", declarations(css, "#contact-form"))
+        is not None,
+        "#contact-form declares display: grid, which places the button below the fields",
     )
 
 

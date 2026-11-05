@@ -308,7 +308,9 @@ Red first:
   `check_no_end_of_life_library`: for every page, every `<script src>` is a first-party path
   under `js/` and every `rel=stylesheet` href is under `css/` or is
   `https://fonts.googleapis.com/`; no src or href names `jquery`, `bootstrap`,
-  `font-awesome`, or `fontawesome`; and those four files are absent from the tree. Drop the
+  `font-awesome`, or `fontawesome`. (The "those four files are absent from the tree" half
+  moved to task 4, which is where they are deleted; asserted here it would hold task 3's
+  commit red. `verify_assets.DEAD_ASSETS` carries it.) Drop the
   `JQUERY` constant and the CLAUDE.md version cross-check (there is no version left to name;
   the allowlist is what keeps a library from coming back unnoticed). Rewrite the comment in
   `check_no_unescaped_interpolation` that says jQuery is loaded on index.html: the point it

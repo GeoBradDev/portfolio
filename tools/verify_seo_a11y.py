@@ -940,16 +940,123 @@ def check_skip_link_and_focus_visibility():
         % css.count(":focus-visible"),
     )
 
-    # bootstrap.min.css carries `a:focus { outline: 5px auto ... }` at the same
-    # (0,1,1) specificity, and style.css loads after it, so deleting the
-    # blanket `outline: none` unmasked it and mouse clicks painted a ring
-    # again. This is the rule that suppresses that without touching the
-    # keyboard ring, and it has to keep existing for as long as Bootstrap does.
+    # Until issue 31 this asserted an `a:focus:not(:focus-visible) { outline:
+    # none }` rule, which existed only to beat bootstrap.min.css's `a:focus {
+    # outline: 5px auto }`: with the blanket suppression deleted, that rule
+    # painted a ring on every mouse click. Bootstrap is gone, and the
+    # browser's own stylesheet keys its ring on :focus-visible, so a click
+    # paints none without any rule. What the old rule protected is asserted
+    # instead: no stylesheet a page uses sets a visible outline on plain
+    # :focus, which is the only way the click ring can come back. The skip
+    # link is exempt; its :focus rule is deliberate and sets no outline.
+    offenders = []
+    for path in HTML_PAGES:
+        page = read_markup(path)
+        if page is None:
+            continue
+        sheets = re.findall(r"<style\b[^>]*>(.*?)</style>", page, re.S | re.I)
+        for href in re.findall(r'<link\b[^>]*\bhref\s*=\s*"(css/[^"]+\.css)"', page, re.I):
+            linked = read(ROOT / href)
+            if linked is not None:
+                sheets.append(linked)
+        for sheet in sheets:
+            sheet = without_comments(sheet, "css")
+            for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", sheet):
+                for part in selector.split(","):
+                    part = part.strip()
+                    if ":focus" not in part or ":focus-visible" in part:
+                        continue
+                    if part.startswith(".skip-link"):
+                        continue
+                    outline = re.search(r"(?<![-\w])outline(?:-style|-width)?\s*:\s*([^;}]+)", body)
+                    if outline and outline.group(1).strip() not in ("none", "0", "0px"):
+                        offenders.append("%s: %s" % (path.name, part))
     check(
-        re.search(r"a:focus:not\(:focus-visible\)\s*\{[^}]*outline\s*:\s*none", css, re.S)
-        is not None,
-        "css/style.css suppresses Bootstrap's mouse-click a:focus ring",
+        not offenders,
+        "no stylesheet paints an outline on plain :focus, so a mouse click shows no ring%s"
+        % (" (found %s)" % "; ".join(sorted(set(offenders))) if offenders else ""),
     )
+
+
+# Bootstrap 3's grid, utilities, and collapse plugin markup. Issue 31 removed
+# bootstrap.min.css and its JavaScript, so any of these left in the markup
+# styles nothing and does nothing.
+BOOTSTRAP_CLASS = re.compile(
+    r"col-(?:xs|sm|md|lg)-\d+|col-(?:xs|sm|md|lg)-offset-\d+|row|text-muted|navbar-right|collapse"
+)
+
+# Class names Bootstrap used to style that index.html still uses as the
+# site's own. Each must now have a rule in css/style.css: an unstyled sr-only,
+# for one, silently renders its label visible and pushes the form apart.
+LOCAL_CLASSES = (
+    "container", "sr-only", "text-center", "navbar-header", "navbar-collapse",
+    "navbar-nav", "navbar-toggle", "navbar-brand", "icon-bar", "nav",
+)
+
+
+def script_class_tokens(source):
+    """Class tokens an inline script can put in the DOM.
+
+    Every whitespace-separated word of every string literal, which covers
+    el("div", "a b") and className = "a b", plus the value of any class
+    attribute written inside a literal, which covers an innerHTML string like
+    "<p class='x'>" where splitting on whitespace alone yields class='x'>.
+    """
+    tokens = []
+    for body in inline_scripts(source):
+        for _, literal in re.findall(r"([\"'`])((?:(?!\1).)*)\1", body):
+            tokens.extend(literal.split())
+            for value in re.findall(r"class\s*=\s*[\"']([^\"']*)[\"']", literal):
+                tokens.extend(value.split())
+            for value in re.findall(r"class\s*=\s*([\w-]+)", literal):
+                tokens.append(value)
+    return tokens
+
+
+def check_no_bootstrap_classes():
+    """No Bootstrap class is left behind, and the ones the site kept are its own.
+
+    Swept over every page and over the string literals in each page's inline
+    scripts, because the portfolio renderer builds its cards' class names
+    there, out of the markup scan's reach.
+    """
+    print("\nNo Bootstrap class or attribute survives, and kept class names are styled")
+
+    for path in HTML_PAGES:
+        source = read_markup(path)
+        if source is None:
+            continue
+        tokens = script_class_tokens(source)
+        for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
+            tokens.extend(value.split())
+        found = sorted(set(t for t in tokens if BOOTSTRAP_CLASS.fullmatch(t)))
+        check(
+            not found,
+            "%s uses no Bootstrap grid, utility, or collapse class%s"
+            % (path.name, " (found %s)" % ", ".join(found) if found else ""),
+        )
+        attributes = sorted(set(re.findall(r"\b(data-toggle|data-target)\s*=", source)))
+        check(
+            not attributes,
+            "%s carries no Bootstrap data attribute%s"
+            % (path.name, " (found %s)" % ", ".join(attributes) if attributes else ""),
+        )
+
+    source = read_markup(INDEX)
+    css = read(STYLE_CSS)
+    if source is None or css is None:
+        return
+    css = without_comments(css, "css")
+    used = set(script_class_tokens(source))
+    for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
+        used.update(value.split())
+    for name in LOCAL_CLASSES:
+        if name not in used:
+            continue
+        check(
+            re.search(r"\.%s(?![\w-])[^{}]*\{" % re.escape(name), css) is not None,
+            "index.html's .%s has a rule in css/style.css" % name,
+        )
 
 
 def grouped_rule_body(css, first_selector):
@@ -1221,6 +1328,7 @@ def main():
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()
+    check_no_bootstrap_classes()
     check_focus_ring_contrast()
     check_site_root_files()
     check_text_contrast()

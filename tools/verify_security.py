@@ -47,8 +47,6 @@ INDEX = ROOT / "index.html"
 RESUME = ROOT / "resume.html"
 PRIVACY = ROOT / "privacy.html"
 STYLE_CSS = ROOT / "css" / "style.css"
-JQUERY = ROOT / "js" / "jquery.min.js"
-CLAUDE_MD = ROOT / "CLAUDE.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 TOOLS = ROOT / "tools"
 
@@ -59,12 +57,6 @@ TOOLS = ROOT / "tools"
 # exempt from both scans. The named constants above stay, for the checks that
 # mean one specific file by name rather than "every page".
 HTML_PAGES = sorted(ROOT.glob("*.html"))
-
-# jQuery below this is affected by CVE-2020-11022, CVE-2020-11023 (XSS via
-# .html()/.append(), fixed in 3.5.0) and CVE-2019-11358 (prototype pollution
-# via $.extend(true, ...), fixed in 3.4.0).
-JQUERY_MIN_MAJOR = 3
-JQUERY_MIN_MINOR = 5
 
 failures = []
 
@@ -103,34 +95,68 @@ def read_or_fail(path):
     return text
 
 
-def check_jquery_version():
-    print("\njQuery is patched against the known CVEs")
+# The libraries issue 31 retired: jQuery 3.x, Bootstrap 3.x, Font Awesome 4.x.
+# All three are end of life, and jQuery stayed on 3.x only because Bootstrap 3
+# could not run on 4. A src or href naming any of them is one coming back.
+RETIRED_LIBRARIES = re.compile(r"jquery|bootstrap|font-?awesome", re.I)
 
-    if not check(JQUERY.exists(), "js/jquery.min.js exists"):
-        return
+# The only third-party origin a page may pull a stylesheet from. Google Fonts
+# serves a font, not a runtime library.
+STYLESHEET_HOSTS = ("https://fonts.googleapis.com/",)
 
-    banner = read(JQUERY)[:200]
-    match = re.search(r"jQuery v(\d+)\.(\d+)\.(\d+)", banner)
-    if not check(match is not None, "js/jquery.min.js declares a version in its banner"):
-        return
 
-    major, minor, patch = (int(g) for g in match.groups())
-    version = "%d.%d.%d" % (major, minor, patch)
-    check(
-        (major, minor) >= (JQUERY_MIN_MAJOR, JQUERY_MIN_MINOR),
-        "js/jquery.min.js is %s, at or above the %d.%d floor"
-        % (version, JQUERY_MIN_MAJOR, JQUERY_MIN_MINOR),
-    )
+def check_no_end_of_life_library():
+    """Every script and stylesheet a page loads is first-party, and none is retired.
 
-    # CLAUDE.md claimed 3.x while 2.2.4 shipped for two years. Assert the
-    # documented version against the file so the claim cannot drift again.
-    doc = read_or_fail(CLAUDE_MD)
-    if doc is None:
-        return
-    check(
-        version in doc,
-        "CLAUDE.md names the shipped jQuery version (%s)" % version,
-    )
+    Replaces check_jquery_version, which asserted jQuery at or above 3.5 and
+    cross-checked the version against CLAUDE.md. Issue 31 removed jQuery,
+    Bootstrap, and Font Awesome, so there is no version left to floor or to
+    document. What keeps a library from coming back unnoticed is now an
+    allowlist: a <script src> must be a path under js/, a stylesheet must be
+    under css/ or come from Google Fonts, and no src or href may name one of
+    the three retired libraries, wherever it is hosted.
+    """
+    print("\nNo page loads a third-party or end-of-life library")
+
+    # HTML_PAGES is discovered from the filesystem, not hardcoded, so a page
+    # added after this check was written is scanned automatically.
+    for path in HTML_PAGES:
+        source = read_or_fail(path)
+        if source is None:
+            continue
+        name = path.name
+        source = re.sub(r"<!--.*?-->", "", source, flags=re.S)
+
+        scripts = re.findall(r'<script\b[^>]*\bsrc\s*=\s*"([^"]*)"', source, re.I)
+        foreign = [src for src in scripts if not re.fullmatch(r"js/[\w./-]+\.js", src)]
+        check(
+            not foreign,
+            "%s loads scripts only from js/%s"
+            % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
+        )
+
+        sheets = []
+        for tag in re.findall(r"<link\b[^>]*>", source, re.I):
+            if re.search(r'\brel\s*=\s*"stylesheet"', tag, re.I):
+                href = re.search(r'\bhref\s*=\s*"([^"]*)"', tag, re.I)
+                sheets.append(href.group(1) if href else "")
+        foreign = [
+            href for href in sheets
+            if not re.fullmatch(r"css/[\w./-]+\.css", href)
+            and not href.startswith(STYLESHEET_HOSTS)
+        ]
+        check(
+            not foreign,
+            "%s links stylesheets only from css/ or Google Fonts%s"
+            % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
+        )
+
+        retired = [ref for ref in scripts + sheets if RETIRED_LIBRARIES.search(ref)]
+        check(
+            not retired,
+            "%s loads no jQuery, Bootstrap, or Font Awesome%s"
+            % (name, " (loads %s)" % ", ".join(retired) if retired else ""),
+        )
 
 
 def check_no_unescaped_interpolation():
@@ -187,10 +213,11 @@ def check_no_unescaped_interpolation():
     # `...${a}...`; el.innerHTML = html;); String.raw and other tagged
     # templates; string concatenation with + instead of interpolation;
     # innerHTML +=; document.write; insertAdjacentHTML reached through an
-    # alias or .bind; range.createContextualFragment; jQuery's .html() and
-    # .append() (jQuery 3.7.1 is loaded on index.html); and
+    # alias or .bind; range.createContextualFragment; and
     # Element.setHTMLUnsafe. Any of these carries remote data past this
-    # check untouched.
+    # check untouched. Since issue 31 no DOM library is loaded on any page,
+    # so the native sinks listed here are the only ones there are; a
+    # library's own HTML-string methods would be another way past.
     #
     # It also has a false positive: it flags any interpolation at these
     # sinks, escaped or not. `${escapeHtml(repo.name)}` fails this check
@@ -365,10 +392,13 @@ def check_icons_are_inline_svg():
         # The renderer sets classes from string literals, which the markup
         # scan above never sees: el("i", "fa fa-star") was exactly that.
         for body in _inline_script_bodies(source):
-            for _, literal in re.findall(r"([\"'])((?:(?!\1).)*)\1", body):
-                classes.extend(
-                    token for token in literal.split() if _is_font_awesome_class(token)
-                )
+            for _, literal in re.findall(r"([\"'`])((?:(?!\1).)*)\1", body):
+                # Words of the literal, plus any class attribute written
+                # inside one, as in an innerHTML string "<i class='fa x'>".
+                words = literal.split()
+                for value in re.findall(r"class\s*=\s*[\"']([^\"']*)[\"']", literal):
+                    words.extend(value.split())
+                classes.extend(token for token in words if _is_font_awesome_class(token))
         check(
             not classes,
             "%s uses no Font Awesome class (fa, fa-*, fas, fab, far, fal)%s"
@@ -765,7 +795,7 @@ def check_ci_workflow():
 
 
 def main():
-    check_jquery_version()
+    check_no_end_of_life_library()
     check_no_unescaped_interpolation()
     check_repo_urls_are_scheme_validated()
     check_no_plain_http_assets()
