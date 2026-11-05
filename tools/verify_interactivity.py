@@ -28,6 +28,14 @@ fragment navigation moves focus into it, and removes the attribute again;
 and css/style.css suppresses the outline on a focused .one-page-section,
 which is a reading position and not a control.
 
+Issue #32 adds one more: nothing covers the page by default and waits for
+script to uncover it. index.html opened with a full-screen .loader-con that
+only js/main.js and the portfolio renderer ever hid, so with JavaScript off
+the page stayed a blank panel forever, and with it on, parsed content sat
+under the overlay after first paint. The check forbids the loader by name
+and, more generally, any fixed full-viewport rule in css/style.css or style
+attribute in index.html that does not hide itself in the same block.
+
 Behavior (does the navbar actually go sticky, does the bar actually
 animate, does a nav link land below the header) cannot be checked here.
 Drive that in a browser.
@@ -992,6 +1000,132 @@ def check_scroll_up_transition(css):
         )
 
 
+LOADER_CLASSES = ("loader-con", "double-bounce1", "double-bounce2")
+ZERO = re.compile(r"^-?0(?:\.0+)?(?:px|%|r?em|vw|vh)?$")
+
+
+def declarations(body):
+    """The declarations of one block as {property: value}, last one wins.
+
+    Lowercased, with !important dropped, so `position:fixed` and
+    `POSITION: Fixed !important` read alike.
+    """
+    found = {}
+    for part in body.split(";"):
+        if ":" not in part:
+            continue
+        prop, value = part.split(":", 1)
+        value = re.sub(r"!\s*important", "", value).strip().lower()
+        found[prop.strip().lower()] = value
+    return found
+
+
+def covers_viewport(decls):
+    """True when one block pins an element over the whole viewport.
+
+    Fixed, and spanning it both ways: a width or height of 100% (the
+    containing block of a fixed element is the viewport) or a viewport unit,
+    or both opposite offsets at zero, or an inset of zero all round. A block
+    that hides the element in the same breath (display: none, visibility:
+    hidden, opacity: 0) is a closed modal or menu, not a cover, and passes.
+    """
+    if decls.get("position") != "fixed":
+        return False
+    if decls.get("display") == "none" or decls.get("visibility") == "hidden":
+        return False
+    if ZERO.match(decls.get("opacity", "1")):
+        return False
+
+    inset = decls.get("inset", "").split()
+    inset_all = bool(inset) and all(ZERO.match(token) for token in inset)
+
+    def zero(prop):
+        return bool(ZERO.match(decls.get(prop, "auto")))
+
+    full_x = re.compile(r"^100(?:%|vw|dvw|svw|lvw)$")
+    full_y = re.compile(r"^100(?:%|vh|dvh|svh|lvh)$")
+    across = (
+        inset_all
+        or bool(full_x.match(decls.get("width", "")))
+        or (zero("left") and zero("right"))
+    )
+    down = (
+        inset_all
+        or bool(full_y.match(decls.get("height", "")))
+        or (zero("top") and zero("bottom"))
+    )
+    return across and down
+
+
+def check_no_script_removed_overlay(html, css, js):
+    """Nothing covers the page by default and waits for script to uncover it.
+
+    Issue 32. index.html opened with <div class="loader-con">, a fixed,
+    full-viewport, near-white panel at z-index 99, and the only two things
+    that ever hid it were hideLoader() in js/main.js and the portfolio
+    renderer's finally block. With JavaScript off the homepage was a blank
+    page with a grey dot, permanently; with it on, content that had already
+    parsed sat under the panel after first paint.
+
+    Two parts. The narrow one forbids the loader by name in the markup, the
+    stylesheet, and every script, so it cannot come back piecemeal. The
+    general one reads every rule in css/style.css (inside @media and
+    @supports too) and every style attribute in index.html, and fails any
+    block that fixes an element over the whole viewport without hiding it in
+    the same block. A full-screen element script opens later, a modal or a
+    menu, has to be hidden in its own base rule and shown by a class.
+
+    Known limit: an overlay built entirely by script, or one whose coverage
+    is split across several rules, is not caught. Drive that in a browser.
+    """
+    html_code = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    why = (
+        "With JavaScript off nothing ever removes it, so the page stays "
+        "covered (issue 32)."
+    )
+
+    tokens = set()
+    for value in re.findall(r"""\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')""", html_code):
+        tokens.update((value[0] or value[1]).split())
+    for name in LOADER_CLASSES:
+        if name in tokens:
+            fail(
+                "index.html has an element with class %r, the full-screen "
+                "loader. %s" % (name, why)
+            )
+
+    for media, selector, body in css_rules(css_code):
+        if re.search(r"\.loader-con\b|\.double-bounce", selector):
+            fail("css/style.css still styles %r, the loader. %s" % (selector.strip(), why))
+    if re.search(r"@(?:-\w+-)?keyframes\s+sk-bounce\b", css_code):
+        fail("css/style.css still declares @keyframes sk-bounce, the loader's animation.")
+
+    if "loader-con" in strip_js_comments(js):
+        fail("js/main.js still references 'loader-con'. %s" % why)
+    inline = re.findall(
+        r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", html_code, flags=re.S | re.I
+    )
+    if any("loader-con" in strip_js_comments(code) for code in inline):
+        fail("An inline script in index.html still references 'loader-con'. %s" % why)
+
+    for media, selector, body in css_rules(css_code):
+        if covers_viewport(declarations(body)):
+            where = (" inside %s" % " ".join(media)) if media else ""
+            fail(
+                "css/style.css: %r%s is position: fixed over the whole "
+                "viewport and does not hide itself in the same rule. %s Hide "
+                "it in its base rule and show it from a class script adds."
+                % (selector.strip(), where, why)
+            )
+    for value in re.findall(r"""\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)')""", html_code):
+        style = value[0] or value[1]
+        if covers_viewport(declarations(style)):
+            fail(
+                "index.html: an element with style=%r is position: fixed over "
+                "the whole viewport. %s" % (style, why)
+            )
+
 def check_no_dead_code(facts, js):
     """Nothing in main.js may target an element or library the page lacks."""
     banned = [
@@ -1058,6 +1192,7 @@ def main():
     check_progress_bars(facts)
     check_card_handler(html, css)
     check_scroll_up_transition(css)
+    check_no_script_removed_overlay(html, css, js)
     check_no_dead_code(facts, js)
     check_syntax()
 
