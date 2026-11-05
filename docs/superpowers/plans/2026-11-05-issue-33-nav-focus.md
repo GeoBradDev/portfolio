@@ -3,7 +3,7 @@
 Risk tier: Medium. Nothing forces High. It starts at Low and raises twice: the behavior is
 keyboard and focus interaction that no source-level check can exercise, so the only real
 proof is a browser at two widths; and it alters existing behavior (where focus sits after
-every in-page link) rather than adding. The diff is small: one attribute on five elements,
+every in-page link) rather than adding. The diff is small: one click listener in `js/main.js`,
 one CSS rule, one verifier check, docs.
 
 Domain skills:
@@ -45,44 +45,58 @@ chevron, and the skip link. Drive script and output:
 
 ## Approach
 
-Make every in-page link target programmatically focusable with `tabindex="-1"` and let the
-browser do the rest. HTML's "scroll to the fragment" runs the focusing steps on the target;
-once the target is focusable it receives real focus. No JavaScript is added.
+Revised after review (see Approval). The first version put a static `tabindex="-1"` on
+every section. It moved focus correctly on link activation, but review confirmed a
+regression: with the sections permanently focusable, a mouse click or tap on any
+non-control content inside a section focuses the section (its nearest focusable ancestor),
+so the next Tab restarts at the section's first control instead of continuing after the
+clicked point. Measured at 375x812: click a lower portfolio card's padding at `scrollY`
+4937, then Tab. On `main` focus goes to the next link (the chromewebstore Live Demo) and
+`scrollY` stays 4937; on the static-attribute commit (f7bc742) focus goes back to the first
+card's Code link and `scrollY` drops to 4150. Probe:
+`/tmp/claude-1000/-home-bradstricherz-WebstormProjects-portfolio/d1665385-8056-4e41-b7d4-da502d9b6e32/scratchpad/issue33/finder2/probe2.py`.
 
-Proven before planning by rewriting `index.html` in flight
-(`/tmp/claude-1000/-home-bradstricherz-WebstormProjects-portfolio/d1665385-8056-4e41-b7d4-da502d9b6e32/scratchpad/issue33/probe_tabindex.py`): with `tabindex="-1"` on the sections,
-`document.activeElement` is the target section after Enter, the smooth scroll still animates
-across frames (not cut short by the focus), the section top still lands at 63px, and the next
-Tab reaches the same element as before.
+So the target is made focusable only for the activation. `js/main.js` gains one click
+listener on `document`. For a primary-button click with no modifier key that was not
+already cancelled, it finds `event.target.closest('a[href^="#"]')`, looks the fragment up
+with `getElementById`, and returns if there is no such element (a bare `#` names none, so
+back to top is untouched) or if the target already carries a `tabindex`. Otherwise it sets
+`tabindex="-1"` and does not cancel the click. The browser's own fragment navigation then
+runs the focusing steps on a now focusable target and focus moves into it. The attribute
+is removed on the target's first `blur`, and on a `setTimeout` of 0, if focus did not land
+on the target, the blur listener and the attribute are removed at once. Keyboard Enter on a
+link fires `click`, so the keyboard path is covered; a modified click opens a new tab or
+window and is left alone. Proven by injection before the rewrite
+(`.../scratchpad/issue33/coord/inject.js`, `probe_dyn.py`).
 
-Why not the JavaScript route the issue sketched (focus on hashchange with `preventScroll`):
-`hashchange` does not fire when the visitor activates the link for the section the hash
-already names, so a second CONTACT after scrolling away would scroll but not move focus;
-covering that means a click listener plus a deferred focus, which is the "script fighting the
-native scroll" `verify_interactivity.py` exists to forbid. The attribute covers every link,
-same-hash re-activation, and the skip link, for free.
+Why not focus on `hashchange` with `preventScroll`, as the issue sketched: `hashchange` does
+not fire when the visitor activates the link for the section the hash already names, so a
+second CONTACT after scrolling away would scroll but not move focus. The click listener sees
+every activation, including same-hash, and it neither scrolls nor cancels anything, so it
+does not fight the native scroll `verify_interactivity.py` protects.
 
-The focus ring on the section. The probe shows Chromium matches `:focus-visible` on the
-section after a keyboard Enter and paints its UA `outline: auto 1px` around the entire
-section. Suppress it with `.one-page-section:focus { outline: none; }`. Reasoning:
+The focus ring on the section. Chromium matches `:focus-visible` on the section after a
+keyboard Enter and paints its UA `outline: auto 1px` around the entire section. Suppress it
+with `.one-page-section:focus { outline: none; }`. Reasoning:
 
-- SC 2.4.7 Focus Visible covers keyboard operable UI components. A `tabindex="-1"` section is
-  not operable and not in the tab order; it is a reading position, not a control.
+- SC 2.4.7 Focus Visible covers keyboard operable UI components. The focused section is not
+  operable and not in the tab order; it is a reading position, not a control.
 - The ring carries no location information: the section has just been scrolled to the top of
   the viewport under the header, and it is several viewports tall, so the ring is mostly off
   screen.
 - Every operable control keeps its `:focus-visible` ring. The next Tab lands on one.
 - `verify_seo_a11y.py`'s plain-`:focus` sweep permits it: `outline: none` paints no ring.
 
-Known side effect, accepted: a mouse click on non-interactive content inside a section now
-focuses that section (the nearest focusable ancestor). With the ring suppressed this is
-invisible, text selection is unaffected, and the next Tab continues from that section, which
-is what the sequential focus starting point already did.
+Known limit, accepted and narrow: while a section still holds focus from a link (the
+attribute stays until the section blurs), a mouse click on non-control content inside that
+same section keeps focus on it, so the next Tab restarts from the section top rather than
+after the clicked point. Any other click, any Tab, or any click outside the section clears
+it, and every later click behaves as on `main`.
 
 Back to top (`<a href="#" class="scroll-up">`) is left as is. `#` targets the top of the
-document, not an element, so focus goes to `<body>` and the next Tab lands on the skip link,
-the first focusable element on the page, at `scrollY` 0. That is the right result for a back
-to top control; the drive asserts it.
+document, not an element, so the handler returns early, focus goes to `<body>`, and the next
+Tab lands on the skip link, the first focusable element on the page, at `scrollY` 0. That is
+the right result for a back to top control; the drive asserts it.
 
 ## Acceptance criteria
 
@@ -102,63 +116,71 @@ Added in Phase 1, from the issue's screen reader paragraph and the orchestrator'
 6. After activating any nav link, the chevron, or the skip link, `document.activeElement` is
    the target section, and that section paints no focus outline.
 7. Back to top lands at `scrollY` 0 and the next Tab does not scroll away from the top.
-8. `tools/verify_interactivity.py` fails when any element an in-page link targets lacks
-   `tabindex="-1"`, carries a non-negative `tabindex`, or when `css/style.css` stops
-   suppressing the outline on a focused `.one-page-section`.
+8. `tools/verify_interactivity.py` fails when an in-page link targets anything but a
+   `.one-page-section`; when any element carries a static `tabindex` of 0 or more, or a
+   target section carries any static `tabindex`; when `js/main.js` lacks the document click
+   listener that selects `a[href^="#"]`, sets `tabindex="-1"`, and removes it again; and
+   when the last on-screen `.one-page-section:focus` rule stops leaving the outline hidden
+   (including `outline-style` or `outline-width` undoing it, or a visible outline under a
+   non-print `@media`).
+10. After focus leaves a section a link moved it into, the section carries no `tabindex`;
+    a modified (ctrl) click on a nav link adds none; and a mouse click on non-control
+    content followed by Tab behaves exactly as on `main` (probe2.py, six rows).
 9. Lighthouse accessibility and SEO stay 100 on `index.html`.
 
 ## Files that change
 
-- `tools/verify_interactivity.py`: new check, `check_link_targets_take_focus(facts, css)`,
-  wired into `main()` after `check_nav_targets`. `IndexFacts` additionally records every
-  in-page fragment link of any class (`fragment_targets`, so the skip link, which carries no
-  `scroll` class, is covered) and the `tabindex` attribute per id (`tabindex`). The check:
-  every fragment target exists and carries `tabindex="-1"` exactly (a missing attribute fails,
-  as does `0` or any positive value, which would put a section into the tab order); and the
-  comment-stripped CSS has a rule whose selector list contains `.one-page-section:focus` with
-  `outline: none` (or `outline: 0`). Bare `#` is excluded, as `nav_targets` already does.
-  Update the module docstring's paragraph listing what it checks.
-- `index.html`: `tabindex="-1"` on the five `<section class="... one-page-section">` elements
-  (`#home`, `#about`, `#services`, `#portfolio`, `#contact`). A short HTML comment above
-  `#home`, or beside the nav comment that already discusses targets, saying why. The comment
-  must not quote a bare `<a ...>` or `<img ...>` tag (the verifiers strip comments, but keep
-  it plain).
-- `css/style.css`: `.one-page-section:focus { outline: none; }` placed directly after the
-  existing `.one-page-section { scroll-margin-top: 63px; }` rule, with a comment carrying the
-  reasoning above in two or three sentences.
-- `js/main.js`: header comment only. Its "Smooth scrolling is the browser's" paragraph gains
-  one sentence: focus is the browser's too, because each section is `tabindex="-1"` and native
-  fragment navigation focuses a focusable target. No code change.
+- `tools/verify_interactivity.py`: `check_link_targets_take_focus(facts, css, js)`, wired
+  into `main()` after `check_nav_targets`. `IndexFacts` records every in-page fragment link
+  of any class (`fragment_targets`, so the skip link, which carries no `scroll` class, is
+  covered), the `tabindex` attribute per id, and every element with a `tabindex`. The check
+  asserts criterion 8. It reads the handler from the comment-stripped `js/main.js`: a function
+  passed to `document.addEventListener("click", ...)` (inline or named) whose body holds the
+  `closest('a[href^="#"]')` selection and `setAttribute("tabindex", "-1")`, and whose body
+  also holds `removeAttribute("tabindex")`. Bare `#` is excluded, as `nav_targets` already
+  does. The existing banned-pattern check still rejects `preventDefault` and scripted scrolls
+  anywhere in the file.
+- `index.html`: no `tabindex` in the markup. The static attributes and their comment from
+  f7bc742 are removed.
+- `css/style.css`: `.one-page-section:focus { outline: none; }` directly after the existing
+  `.one-page-section { scroll-margin-top: 63px; }` rule, its comment saying a section is
+  focusable only while a link has just moved focus there.
+- `js/main.js`: the click listener, inside `init()`, under its own section banner, in the
+  file's ES5 style. The header's "Smooth scrolling is the browser's" paragraph says focus is
+  moved by the browser too, with the listener only making the target focusable for that one
+  activation.
 - `CLAUDE.md`: Phase 8 reconciles. Likely the Accessibility section gains one invariant
-  (sections are `tabindex="-1"` so fragment navigation moves focus; the outline is suppressed
-  on them only; do not add a click handler for it), and the `js/main.js` "Navigation &
-  Scrolling" bullets are checked against reality.
+  (sections carry no static `tabindex`; the click listener adds and removes it; the outline
+  is suppressed on them only), and the `js/main.js` "Navigation & Scrolling" bullets are
+  checked against reality.
 
 Nothing else. No `package.json`, no build step, no test runner in the repo. The browser drive
 lives in the scratch directory, as the #31 drive did.
 
 ## Order of work
 
-1. Red: add `check_link_targets_take_focus` to `verify_interactivity.py`. Run it on the
-   unchanged tree; it must FAIL naming all five sections and the missing CSS rule. Commit
-   `test: require in-page link targets to take focus (issue 33)`.
-2. Red in the browser: run `/tmp/claude-1000/-home-bradstricherz-WebstormProjects-portfolio/d1665385-8056-4e41-b7d4-da502d9b6e32/scratchpad/issue33/drive33.py` against the unchanged tree served on
-   a local port; the "focus moved into" lines FAIL (14 of them, as in Phase 1). Save output.
-3. Green: add the `tabindex="-1"` attributes and the CSS rule. Rerun the check: PASS. Mutation
-   test the check by hand (scratch copies, never committed): remove the attribute from one
-   section; set it to `0`; delete the CSS rule; change the rule to `outline: 2px solid`. Each
-   must FAIL. Commit `fix: move focus into the section a nav link targets (issue 33)`.
-4. Comments: the `js/main.js` header sentence. Commit with step 3 or as `docs:`.
-5. Gate: all six verifiers, in the order listed in CLAUDE.md.
-6. Live drive: `drive33.py` extended with a check that the focused section's computed
-   `outline-style` is `none`, a same-hash re-activation case (hash already `#contact`, scroll
-   to top, Enter on CONTACT again: focus on `#contact`, lands at 63px), and a mouse click on a
-   nav link at 1440 (focus on the section, no outline), a mouse drag across a paragraph inside
-   `#about` (the selection is non-empty, which proves the accepted side effect leaves text
-   selection working), and a mouse click into a contact form field (focus is the field, not
-   `#contact`). Run at 375 (menu open) and 1440, no
-   preference and reduced motion. Expect `FAILS 0`, `ERRORS none`.
-7. Lighthouse accessibility and SEO on `index.html` served locally: both 100.
+1. Red (done, 293d39a, then rewritten): the first check required the static attribute. After
+   review it was rewritten (see Approval) and committed alone as
+   `test: require focus to move only on link activation (issue 33)`. It must be red on
+   `origin/main` (654f193) and on f7bc742; both outputs are under Proof.
+2. Red in the browser: `drive33b.py` against f7bc742's parent showed the focus lines failing;
+   probe2.py against f7bc742 shows the Tab order regression.
+3. Green: remove the static attributes, add the click listener, update the comments. Rerun the
+   check: PASS. Commit `fix: move focus only when a link is activated (issue 33)`. Mutation
+   test on scratch copies, never committed, each must FAIL: handler missing; handler calls
+   `event.preventDefault()`; handler never removes the attribute; a static `tabindex="-1"`
+   back on one section; `tabindex="0"` on a section; outline rule deleted; outline rule only
+   inside `@media print`; a later `.one-page-section:focus { outline: 2px solid }`;
+   `outline-style: solid` inside the rule; a fragment link to a non-section id.
+4. Gate: all six verifiers, in the order listed in CLAUDE.md.
+5. Live drive: `drive33b.py` at 375 (menu open) and 1440, no preference and reduced motion:
+   focus moves into the target, computed `outline-style` `none`, same-hash re-activation,
+   mouse click on a nav link at 1440, drag-select in `#about`, click into `#name` and
+   `#message`; plus: after Tab away from a focused section it has no `tabindex`, and after a
+   ctrl-click on a nav link at 1440 the target has no `tabindex`. `probe2.py` against the
+   branch and against `main`, six rows matching. `frames33.py`: the smooth scroll still
+   animates frame by frame. Expect `FAILS 0`, `ERRORS none`.
+6. Lighthouse accessibility and SEO on `index.html` served locally: both 100.
 
 ## Risks
 
@@ -167,10 +189,11 @@ lives in the scratch directory, as the #31 drive did.
   since the menu closes during the same click.
 - A section ring appearing anyway via a more specific rule (`.home-1 a:focus-visible` etc. only
   target anchors, so none is expected). The drive reads computed `outline-style`.
-- `verify_seo_a11y.py`'s "first focusable element is the skip link" scan: its regex matches
-  only `a[href]`, `button`, `input`, `select`, `textarea`, so a `tabindex="-1"` section does
-  not displace the skip link. `tabindex="-1"` is also not in the tab order, so the runtime
-  answer is the same.
+- `verify_seo_a11y.py`'s "first focusable element is the skip link" scan: the markup carries
+  no `tabindex` now, and a section the listener makes focusable for a moment is not in the
+  tab order, so the skip link stays first.
+- The listener must not cancel the click or scroll. It calls neither; the existing
+  banned-pattern check fails the gate if it ever does.
 - Lighthouse: `tabindex="-1"` on a non-interactive element raises no audit; only positive
   tabindex does (`tabindex` audit). Confirmed by running it.
 - Not chosen: `aria-labelledby` on each section to make it a named region landmark. It would
@@ -189,5 +212,37 @@ lives in the scratch directory, as the #31 drive did.
 | 5 | The six verifier outputs |
 | 6 | `drive33.py`: `document.activeElement` is the target section; computed `outline-style` `none`; same-hash re-activation case |
 | 7 | `drive33.py`: back to top `scrollY` 0 before and after Tab |
-| 8 | `verify_interactivity.py` red run before the fix, plus the four hand mutations each failing |
+| 8 | `verify_interactivity.py` red on `origin/main` and on f7bc742 (below), plus the ten hand mutations each failing |
 | 9 | Lighthouse output |
+| 10 | `drive33b.py` tabindex-removed and ctrl-click lines; `probe2.py` rows on the branch equal to `main` |
+
+### Red runs of the rewritten check
+
+On `origin/main` (654f193), archive copy with only the rewritten verifier dropped in:
+
+```
+FAIL: 2 check(s) failed
+
+  - js/main.js has no click listener on document that selects the activated fragment link with closest('a[href^="#"]') and sets tabindex="-1" on its target, so a nav link scrolls but leaves focus on <body>.
+  - css/style.css does not leave the outline hidden on a focused .one-page-section (the last on-screen `.one-page-section:focus` rule must set outline: none), so a nav link paints a focus ring around the whole section it lands on.
+```
+
+On f7bc742's tree (the static attribute approach) with the rewritten verifier:
+
+```
+FAIL: 6 check(s) failed
+
+  - #about carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
+  - #home carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
+  - #services carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
+  - #portfolio carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
+  - #contact carries a static tabindex="-1". A mouse click or tap inside the section then focuses it, and the next Tab restarts at its first control; js/main.js adds the attribute only when a link is activated.
+  - js/main.js has no click listener on document that selects the activated fragment link with closest('a[href^="#"]') and sets tabindex="-1" on its target, so a nav link scrolls but leaves focus on <body>.
+```
+
+## Approval
+
+Frozen test rewritten with approval from the orchestrator, on the owner's behalf, 2026-11-05.
+Rationale: the test was written on this unmerged branch for an approach the evidence showed
+to regress mouse and touch Tab order; the replacement asserts the corrected behavior and is
+stronger (it adds the three hardenings), so this is a correction, not a weakened gate.

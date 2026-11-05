@@ -21,11 +21,12 @@ scroll-margin-top that clears the fixed header), and main.js neither calls a
 jQuery or Bootstrap API nor scrolls or cancels anything itself that would
 fight that native scroll.
 
-Issue #33 adds one more: every element an in-page link targets carries
-tabindex="-1", so native fragment navigation moves focus into it and the
-reading position moves with the scroll, and css/style.css suppresses the
-outline on a focused .one-page-section, which is a reading position and not
-a control.
+Issue #33 adds one more: focus follows an activated in-page link. Every
+link target is a .one-page-section with no static tabindex; js/main.js makes
+the target focusable only for the click that activates the link, so native
+fragment navigation moves focus into it, and removes the attribute again;
+and css/style.css suppresses the outline on a focused .one-page-section,
+which is a reading position and not a control.
 
 Behavior (does the navbar actually go sticky, does the bar actually
 animate, does a nav link land below the header) cannot be checked here.
@@ -64,6 +65,7 @@ class IndexFacts(HTMLParser):
         self.nav_targets = []    # fragment of every <a class="scroll" href="#...">
         self.fragment_targets = []  # fragment of every <a href="#...">, any class
         self.tabindex = {}       # id -> tabindex attribute (None when absent)
+        self.tabindexes = []     # (tag, id, value) of every element with a tabindex
         self.progress_bars = []  # (data-percent, style) per .progress-bar-line
         self.parallax = []       # tag name of every element with class "parallax"
         self.toggles = []        # attrs of every element with class "navbar-toggle"
@@ -82,6 +84,9 @@ class IndexFacts(HTMLParser):
         if attr.get("id"):
             self.ids[attr["id"]] = classes
             self.tabindex[attr["id"]] = attr.get("tabindex")
+
+        if "tabindex" in attr:
+            self.tabindexes.append((tag, attr.get("id"), attr["tabindex"]))
 
         if tag == "a":
             href = attr.get("href") or ""
@@ -352,54 +357,143 @@ def check_nav_targets(facts):
             )
 
 
-def check_link_targets_take_focus(facts, css):
-    """Every in-page link target takes focus, and a focused section paints no ring.
+# @media preludes under which a rule applies to every on-screen visitor.
+SCREEN_MEDIA = r"@media\s+(?:only\s+)?(?:screen|all)"
+
+# The one link the handler serves: any anchor whose href is a fragment.
+FRAGMENT_LINK = r"""closest\(\s*(["'])a\[href\^=(?:"#"|'#')\]\1\s*\)"""
+
+
+def outline_state(body):
+    """'hidden', 'visible', or None: what a declaration block does to the outline.
+
+    The last outline, outline-style, or outline-width declaration decides.
+    `outline: none; outline-style: solid` paints a ring, and so, for this
+    check, does `outline: none; outline-width: 2px`: either one undoes the
+    suppression the rule exists for.
+    """
+    state = None
+    for prop, value in re.findall(r"(?<![-\w])(outline(?:-style|-width)?)\s*:\s*([^;]+)", body):
+        value = re.sub(r"!\s*important", "", value).strip().lower()
+        if prop == "outline":
+            state = "hidden" if value in ("none", "0", "0px") else "visible"
+        elif prop == "outline-style":
+            state = "hidden" if value in ("none", "hidden") else "visible"
+        else:
+            state = "hidden" if re.fullmatch(r"0(?:\.0+)?(?:px|r?em)?", value) else "visible"
+    return state
+
+
+def check_link_targets_take_focus(facts, css, js):
+    """Focus moves into a section only when a link to it is activated.
 
     Issue 33. Native fragment navigation runs the focusing steps on its
     target, but a plain section is not focusable, so Chromium blurs the link
     and leaves focus on <body>: the page scrolls and nothing tells assistive
-    technology the reading position moved. tabindex="-1" makes the target
-    focusable without putting it in the tab order, and the browser does the
-    rest, including when the hash already names the section, which a
-    hashchange listener would miss. Exactly "-1": a 0 or a positive value
-    puts a whole section into the tab order.
+    technology the reading position moved.
 
-    The skip link carries no scroll class, so this reads every fragment link,
-    not just nav_targets. A bare "#" targets the top of the document, not an
-    element, and is excluded.
+    A static tabindex="-1" on each section fixed that and broke something
+    else: a mouse click or tap on any non-control content inside a section
+    then focuses the section, so the next Tab restarts at the section's
+    first control. At 375px, a click on a lower portfolio card at scrollY
+    4937 followed by Tab jumped back to the first card's Code link at 4150.
+    So no section may carry a static tabindex, and no element may carry a
+    tabindex of 0 or more, which would put it into the tab order. Instead
+    js/main.js listens for clicks on document, and for an anchor whose href
+    is a fragment it sets tabindex="-1" on the target without cancelling the
+    click, then removes the attribute again, so a section is focusable only
+    for the moment a link moves focus into it. A bare "#" names no element,
+    so back to top is untouched.
 
-    The focused section is a reading position, not a control, and its UA
-    ring would outline a box several viewports tall, so css/style.css must
-    suppress it with a rule whose selector list names .one-page-section:focus.
+    Every link target has to be a .one-page-section, because that is the
+    selector the outline suppression names. The focused section is a reading
+    position, not a control, and its UA ring would outline a box several
+    viewports tall. The last .one-page-section:focus rule that applies on
+    screen (outside @media, or under @media screen or all) decides, and it
+    must leave the outline hidden; a rule under any other query except print
+    that paints an outline on it, or on .one-page-section:focus-visible,
+    fails, since it shows at some width.
     """
     for target in facts.fragment_targets:
-        if target not in facts.ids:
+        classes = facts.ids.get(target)
+        if classes is None:
             fail("An in-page link points at #%s but no element has that id." % target)
-            continue
-        value = facts.tabindex.get(target)
-        if value is None:
+        elif "one-page-section" not in classes:
             fail(
-                '#%s lacks tabindex="-1", so a link to it scrolls but leaves '
-                "focus on <body> and the reading position never moves." % target
+                "An in-page link points at #%s, which is not a .one-page-section, "
+                "so the outline suppression does not cover it and focusing it "
+                "paints a ring around the whole element." % target
             )
-        elif value.strip() != "-1":
+        elif facts.tabindex.get(target) is not None:
             fail(
-                '#%s carries tabindex="%s"; it must be exactly "-1", or the '
-                "section joins the tab order." % (target, value)
+                '#%s carries a static tabindex="%s". A mouse click or tap inside '
+                "the section then focuses it, and the next Tab restarts at its "
+                "first control; js/main.js adds the attribute only when a link "
+                "is activated." % (target, facts.tabindex[target])
             )
 
-    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    suppressed = False
-    for media, selector, body in css_rules(css_code):
-        if not any(part.strip() == ".one-page-section:focus" for part in selector.split(",")):
+    for tag, element_id, value in facts.tabindexes:
+        try:
+            number = int(value.strip())
+        except ValueError:
             continue
-        outline = re.findall(r"(?<![-\w])outline\s*:\s*([^;]+)", body)
-        if outline and re.sub(r"!\s*important", "", outline[-1]).strip().lower() in ("none", "0"):
-            suppressed = True
-    if not suppressed:
+        if number >= 0:
+            fail(
+                '<%s%s> carries tabindex="%s", which puts it into the tab order.'
+                % (tag, "#" + element_id if element_id else "", value)
+            )
+
+    js_code = strip_js_comments(js)
+    spans = function_spans(js_code)
+    listener = r"document\s*\.\s*addEventListener\(\s*([\"'])click\1\s*,\s*"
+    handlers = [span for span in spans if span[0] is None and re.search(listener + r"$", span[3])]
+    for name in re.findall(listener + r"([A-Za-z_$][\w$]*)\s*[,)]", js_code):
+        handlers.extend(span for span in spans if span[0] == name[1])
+    bodies = [js_code[span[1]:span[2]] for span in handlers]
+    found = [
+        body for body in bodies
+        if re.search(FRAGMENT_LINK, body)
+        and re.search(r"""setAttribute\(\s*(["'])tabindex\1\s*,\s*(["'])-1\2\s*\)""", body)
+    ]
+    if not found:
         fail(
-            "css/style.css has no `.one-page-section:focus { outline: none }`, so "
-            "a nav link paints a focus ring around the whole section it lands on."
+            "js/main.js has no click listener on document that selects the "
+            "activated fragment link with closest('a[href^=\"#\"]') and sets "
+            "tabindex=\"-1\" on its target, so a nav link scrolls but leaves "
+            "focus on <body>."
+        )
+    elif not any(re.search(r"""removeAttribute\(\s*(["'])tabindex\1\s*\)""", body) for body in found):
+        fail(
+            "js/main.js sets tabindex=\"-1\" on a link target but never removes "
+            "it, which leaves the section permanently focusable and brings back "
+            "the mouse and touch Tab order regression."
+        )
+
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    decided = None
+    for media, selector, body in css_rules(css_code):
+        parts = [part.strip() for part in selector.split(",")]
+        on_screen = all(re.fullmatch(SCREEN_MEDIA, prelude) for prelude in media)
+        printed = any(re.fullmatch(r"@media\s+(?:only\s+)?print", prelude) for prelude in media)
+        state = outline_state(body)
+        if ".one-page-section:focus" in parts and on_screen and state is not None:
+            decided = state
+        elif (
+            not on_screen and not printed and state == "visible"
+            and ({".one-page-section:focus", ".one-page-section:focus-visible"} & set(parts))
+        ):
+            fail(
+                "%r paints an outline on a focused section inside %s."
+                % (selector, " ".join(media))
+            )
+        if on_screen and ".one-page-section:focus-visible" in parts and state == "visible":
+            fail("%r paints an outline on a focused section." % selector)
+    if decided != "hidden":
+        fail(
+            "css/style.css does not leave the outline hidden on a focused "
+            ".one-page-section (the last on-screen `.one-page-section:focus` rule "
+            "must set outline: none), so a nav link paints a focus ring around "
+            "the whole section it lands on."
         )
 
 
@@ -868,7 +962,7 @@ def main():
     check_smooth_scroll_starts_on_load(css, js)
     check_nav_breakpoints(css)
     check_nav_targets(facts)
-    check_link_targets_take_focus(facts, css)
+    check_link_targets_take_focus(facts, css, js)
     check_progress_bars(facts)
     check_card_handler(html, css)
     check_scroll_up_transition(css)
