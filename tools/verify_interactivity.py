@@ -21,6 +21,12 @@ scroll-margin-top that clears the fixed header), and main.js neither calls a
 jQuery or Bootstrap API nor scrolls or cancels anything itself that would
 fight that native scroll.
 
+Issue #33 adds one more: every element an in-page link targets carries
+tabindex="-1", so native fragment navigation moves focus into it and the
+reading position moves with the scroll, and css/style.css suppresses the
+outline on a focused .one-page-section, which is a reading position and not
+a control.
+
 Behavior (does the navbar actually go sticky, does the bar actually
 animate, does a nav link land below the header) cannot be checked here.
 Drive that in a browser.
@@ -56,6 +62,8 @@ class IndexFacts(HTMLParser):
         self.scripts = []        # src of every <script src=...>
         self.ids = {}            # id -> set of class tokens
         self.nav_targets = []    # fragment of every <a class="scroll" href="#...">
+        self.fragment_targets = []  # fragment of every <a href="#...">, any class
+        self.tabindex = {}       # id -> tabindex attribute (None when absent)
         self.progress_bars = []  # (data-percent, style) per .progress-bar-line
         self.parallax = []       # tag name of every element with class "parallax"
         self.toggles = []        # attrs of every element with class "navbar-toggle"
@@ -73,6 +81,12 @@ class IndexFacts(HTMLParser):
 
         if attr.get("id"):
             self.ids[attr["id"]] = classes
+            self.tabindex[attr["id"]] = attr.get("tabindex")
+
+        if tag == "a":
+            href = attr.get("href") or ""
+            if href.startswith("#") and len(href) > 1 and href[1:] not in self.fragment_targets:
+                self.fragment_targets.append(href[1:])
 
         if tag == "a" and "scroll" in classes:
             href = attr.get("href") or ""
@@ -336,6 +350,57 @@ def check_nav_targets(facts):
                 "#%s lacks the one-page-section class, so its nav link never "
                 "highlights." % target
             )
+
+
+def check_link_targets_take_focus(facts, css):
+    """Every in-page link target takes focus, and a focused section paints no ring.
+
+    Issue 33. Native fragment navigation runs the focusing steps on its
+    target, but a plain section is not focusable, so Chromium blurs the link
+    and leaves focus on <body>: the page scrolls and nothing tells assistive
+    technology the reading position moved. tabindex="-1" makes the target
+    focusable without putting it in the tab order, and the browser does the
+    rest, including when the hash already names the section, which a
+    hashchange listener would miss. Exactly "-1": a 0 or a positive value
+    puts a whole section into the tab order.
+
+    The skip link carries no scroll class, so this reads every fragment link,
+    not just nav_targets. A bare "#" targets the top of the document, not an
+    element, and is excluded.
+
+    The focused section is a reading position, not a control, and its UA
+    ring would outline a box several viewports tall, so css/style.css must
+    suppress it with a rule whose selector list names .one-page-section:focus.
+    """
+    for target in facts.fragment_targets:
+        if target not in facts.ids:
+            fail("An in-page link points at #%s but no element has that id." % target)
+            continue
+        value = facts.tabindex.get(target)
+        if value is None:
+            fail(
+                '#%s lacks tabindex="-1", so a link to it scrolls but leaves '
+                "focus on <body> and the reading position never moves." % target
+            )
+        elif value.strip() != "-1":
+            fail(
+                '#%s carries tabindex="%s"; it must be exactly "-1", or the '
+                "section joins the tab order." % (target, value)
+            )
+
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    suppressed = False
+    for media, selector, body in css_rules(css_code):
+        if not any(part.strip() == ".one-page-section:focus" for part in selector.split(",")):
+            continue
+        outline = re.findall(r"(?<![-\w])outline\s*:\s*([^;]+)", body)
+        if outline and re.sub(r"!\s*important", "", outline[-1]).strip().lower() in ("none", "0"):
+            suppressed = True
+    if not suppressed:
+        fail(
+            "css/style.css has no `.one-page-section:focus { outline: none }`, so "
+            "a nav link paints a focus ring around the whole section it lands on."
+        )
 
 
 def check_deep_link_is_not_animated(css, js):
@@ -803,6 +868,7 @@ def main():
     check_smooth_scroll_starts_on_load(css, js)
     check_nav_breakpoints(css)
     check_nav_targets(facts)
+    check_link_targets_take_focus(facts, css)
     check_progress_bars(facts)
     check_card_handler(html, css)
     check_scroll_up_transition(css)
