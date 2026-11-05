@@ -322,6 +322,84 @@ def check_deep_link_is_not_animated(css, js):
             )
 
 
+def css_rules(css, media=()):
+    """Every style rule as (enclosing @media preludes, selector, declarations).
+
+    A small brace walker, enough for this stylesheet: it descends into any
+    at-rule block and records the prelude of each @media it passes through.
+    """
+    rules = []
+    index = 0
+    while index < len(css):
+        brace = css.find("{", index)
+        if brace == -1:
+            break
+        prelude = css[index:brace].strip()
+        depth, end = 1, brace + 1
+        while depth and end < len(css):
+            if css[end] == "{":
+                depth += 1
+            elif css[end] == "}":
+                depth -= 1
+            end += 1
+        body = css[brace + 1:end - 1]
+        if prelude.startswith("@"):
+            inner = media + (prelude,) if prelude.startswith("@media") else media
+            rules.extend(css_rules(body, inner))
+        else:
+            rules.append((media, prelude, body))
+        index = end
+    return rules
+
+
+def check_collapse_covers_every_width(css):
+    """The mobile menu is hidden at every width the inline nav does not cover.
+
+    Found in review of issue 31. The hiding rules sat in @media (max-width:
+    767px) and the inline layout in @media (min-width: 768px). Viewport width
+    is fractional under browser zoom, and a width between 767 and 768
+    matches neither query: the menu showed, the toggle showed beside it, and
+    the toggle did nothing visible. Bootstrap hid .collapse unconditionally
+    and only shows it from 768px up, which covers every width.
+
+    So the hidden state of .navbar-collapse has to be a rule outside any
+    max-width query, and no max-width query may decide whether the menu or
+    the toggle is displayed: the min-width: 768px block alone overrides the
+    base.
+    """
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    targets = (".navbar-collapse", ".navbar-collapse.is-open", ".navbar-toggle")
+
+    def capped(media):
+        return any(re.search(r"max-width", prelude) for prelude in media)
+
+    hidden_base = False
+    for media, selector, body in css_rules(css_code):
+        parts = [part.strip() for part in selector.split(",")]
+        display = re.search(r"(?<![-\w])display\s*:\s*([^;]+)", body)
+        if not display or not any(part in targets for part in parts):
+            continue
+        if capped(media):
+            fail(
+                "%s sets display inside %s. A width between two breakpoints "
+                "(767.5px under browser zoom) matches neither that query nor "
+                "min-width: 768px, and gets neither the hidden menu nor the "
+                "inline one. Make the mobile state the base rule and let "
+                "min-width: 768px override it." % (selector, " ".join(media))
+            )
+        if (
+            ".navbar-collapse" in parts
+            and not media
+            and display.group(1).strip() == "none"
+        ):
+            hidden_base = True
+    if not hidden_base:
+        fail(
+            "No unconditional `.navbar-collapse { display: none }` rule, so "
+            "some width can show the mobile menu with no way to close it."
+        )
+
+
 def check_progress_bars(facts):
     """Bars animate from the CSS 5% default to data-percent."""
     if not facts.progress_bars:
@@ -456,6 +534,7 @@ def main():
     check_nav_toggle(facts)
     check_native_smooth_scroll(css, js)
     check_deep_link_is_not_animated(css, js)
+    check_collapse_covers_every_width(css)
     check_nav_targets(facts)
     check_progress_bars(facts)
     check_card_handler(html, css)
