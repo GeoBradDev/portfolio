@@ -999,36 +999,113 @@ def check_form_controls_are_labelled():
 
 
 ZERO_LENGTH = re.compile(r"[-+]?0*\.?0+(?:[a-z%]+)?")
+LENGTH = re.compile(r"[-+]?\d*\.?\d+(?:[a-z%]+)?")
+COLOR_FUNCTIONS = {
+    "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color",
+}
+
+
+def css_tokens(value):
+    """Top-level tokens of a CSS value, a function call kept whole.
+
+    rgb(0 0 0) is one token, not three zeros. Splitting on whitespace alone
+    read the components of a color as zero widths and passed a visible ring.
+    """
+    tokens, current, depth = [], "", 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        if char.isspace() and depth == 0:
+            if current:
+                tokens.append(current)
+            current = ""
+        else:
+            current += char
+    if current:
+        tokens.append(current)
+    return tokens
+
+
+def split_top_level(value, separator=","):
+    """value split at separators outside any parentheses."""
+    parts, current, depth = [], "", 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        if char == separator and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += char
+    parts.append(current)
+    return parts
+
+
+def invisible_color(token):
+    """True for transparent and for a color function whose alpha is zero.
+
+    A fully transparent alpha, rgb(0 0 0 / 0) or rgba(0, 0, 0, 0), paints
+    nothing, exactly like the keyword. var() is unknown here and counts as
+    visible.
+    """
+    if token == "transparent":
+        return True
+    match = re.fullmatch(r"([a-z-]+)\((.*)\)", token)
+    if not match or match.group(1) not in COLOR_FUNCTIONS:
+        return False
+    inner = match.group(2)
+    if "/" in inner:
+        alpha = inner.rsplit("/", 1)[1].strip()
+    else:
+        parts = [part.strip() for part in split_top_level(inner)]
+        if len(parts) != 4:
+            return False
+        alpha = parts[3]
+    return re.fullmatch(r"[-+]?0*\.?0+%?", alpha) is not None
+
+
+def is_length(token):
+    """A width or offset token: a number with a unit, or a bare number."""
+    return LENGTH.fullmatch(token) is not None
 
 
 def paints_ring(prop, value, body):
     """Whether a focus declaration paints anything in normal rendering.
 
     An outline paints nothing when its style is none or hidden, its width is
-    zero, or its color is transparent (the forced-colors technique, which
-    shows only when the OS replaces colors). A box-shadow list paints nothing
-    when every shadow in it is transparent or has no offset, blur, or spread.
+    zero, or its color is transparent or has zero alpha (the forced-colors
+    technique, which shows only when the OS replaces colors). A box-shadow
+    list paints nothing when every shadow in it is invisible in color or has
+    no offset, blur, or spread. Values are tokenized with color functions and
+    var() kept whole, so only a real width can read as zero.
     """
-    tokens = value.split()
+    tokens = css_tokens(value)
     if prop.startswith("outline"):
         color = re.search(r"(?<![-\w])outline-color\s*:\s*([^;}]+)", body)
-        if color and "transparent" in color.group(1).lower():
-            return False
+        if color:
+            declared = css_tokens(re.sub(r"!\s*important", "", color.group(1)).strip().lower())
+            if declared and invisible_color(declared[0]):
+                return False
         if prop == "outline-width":
-            return not all(ZERO_LENGTH.fullmatch(t) for t in tokens)
-        if {"none", "hidden", "transparent"} & set(tokens):
+            return not all(ZERO_LENGTH.fullmatch(t) for t in tokens if is_length(t))
+        if {"none", "hidden"} & set(tokens):
             return False
-        if any(ZERO_LENGTH.fullmatch(t) for t in tokens):
+        if any(invisible_color(t) for t in tokens):
+            return False
+        if any(is_length(t) and ZERO_LENGTH.fullmatch(t) for t in tokens):
             return False
         return bool(tokens)
     if value in ("none", "") or prop != "box-shadow":
         return False
-    shadows = re.split(r",(?![^()]*\))", value)
-    for shadow in shadows:
-        parts = shadow.split()
-        if "transparent" in parts:
+    for shadow in split_top_level(value):
+        parts = css_tokens(shadow.strip())
+        if any(invisible_color(t) for t in parts):
             continue
-        lengths = [t for t in parts if re.fullmatch(r"[-+]?\d*\.?\d+(?:[a-z%]+)?", t)]
+        lengths = [t for t in parts if is_length(t)]
         if lengths and all(ZERO_LENGTH.fullmatch(t) for t in lengths):
             continue
         return True
@@ -1183,32 +1260,120 @@ LOCAL_CLASSES = (
 )
 
 
+def js_expression(code, start, stops=",)"):
+    """(text, end) of the JavaScript expression starting at code[start].
+
+    It ends at the first character in stops that sits outside every bracket
+    and string, so el(String("span"), a ? "b" : "c") splits into its two
+    arguments correctly. Strings, template literals, and nested calls are
+    stepped over whole.
+    """
+    depth, index, length = 0, start, len(code)
+    while index < length:
+        char = code[index]
+        if char in "\"'`":
+            index = skip_js_string(code, index)
+            continue
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and char in stops:
+            break
+        index += 1
+    return code[start:index], index
+
+
+def skip_js_string(code, start):
+    """Index just past the string or template literal opening at code[start]."""
+    quote, index, length = code[start], start + 1, len(code)
+    while index < length:
+        char = code[index]
+        if char == "\\":
+            index += 2
+            continue
+        if quote == "`" and code.startswith("${", index):
+            _, index = js_expression(code, index + 2, "}")
+            index += 1
+            continue
+        if char == quote:
+            return index + 1
+        index += 1
+    return length
+
+
+def string_parts(expression):
+    """Every static string piece in an expression.
+
+    Each quoted literal whole, each template literal's static text, and the
+    strings inside its ${} parts, so a ternary, a concatenation, or a
+    template yields every class name it can produce.
+    """
+    parts, index, length = [], 0, len(expression)
+    while index < length:
+        char = expression[index]
+        if char in "\"'":
+            end = skip_js_string(expression, index)
+            parts.append(expression[index + 1:end - 1])
+            index = end
+        elif char == "`":
+            end = skip_js_string(expression, index)
+            body = expression[index + 1:end - 1]
+            static, inner = "", 0
+            while inner < len(body):
+                if body.startswith("${", inner):
+                    nested, close = js_expression(body, inner + 2, "}")
+                    parts.extend(string_parts(nested))
+                    static += " "
+                    inner = close + 1
+                    continue
+                static += body[inner]
+                inner += 1
+            parts.append(static)
+            index = end
+        else:
+            index += 1
+    return parts
+
+
 def script_class_tokens(source):
     """Class tokens an inline script puts in the DOM, read where classes go.
 
-    Only class-bearing positions: the second argument of the renderer's
-    el(tag, className, text), assignments to .className, string arguments of
-    classList.add/toggle/replace, setAttribute("class", ...), and class
-    attributes inside an HTML string. Every word of every string used to
-    count, which made card prose such as "works well" read as Bootstrap's
-    .well class.
+    Only class-bearing positions, each read as a whole expression: the
+    second argument of the renderer's el(tag, className, text), the right
+    side of .className = or +=, every argument of classList.add, toggle, or
+    replace, the value argument of setAttribute("class", ...), and class
+    attributes inside an HTML string. Every string piece of those
+    expressions counts, so a ternary, a concatenation, or a template literal
+    cannot carry a class past the scan. Strings anywhere else are not read:
+    every word of every string used to count, which made card prose such as
+    "works well" read as Bootstrap's .well class.
     """
     tokens = []
+
+    def add(expression):
+        for part in string_parts(expression):
+            tokens.extend(part.split())
+
     for body in inline_scripts(source):
         code = strip_js_comments(body)
-        literal = r"([\"'`])((?:(?!\1).)*)\1"
-        for match in re.finditer(r"\bel\(\s*[^,()]+,\s*" + literal, code):
-            tokens.extend(match.group(2).split())
-        for match in re.finditer(r"\.className\s*\+?=\s*" + literal, code):
-            tokens.extend(match.group(2).split())
-        for match in re.finditer(r"\.classList\s*\.\s*(?:add|toggle|replace)\(([^)]*)\)", code):
-            for _, value in re.findall(literal, match.group(1)):
-                tokens.extend(value.split())
-        for match in re.finditer(
-            r"setAttribute\(\s*([\"'])class\1\s*,\s*([\"'`])((?:(?!\2).)*)\2", code
-        ):
-            tokens.extend(match.group(3).split())
-        for _, value in re.findall(literal, code):
+        for match in re.finditer(r"\bel\s*\(", code):
+            _, comma = js_expression(code, match.end())
+            if comma < len(code) and code[comma] == ",":
+                expression, _ = js_expression(code, comma + 1)
+                add(expression)
+        for match in re.finditer(r"\.className\s*\+?=(?!=)", code):
+            expression, _ = js_expression(code, match.end(), ";\n,)")
+            add(expression)
+        for match in re.finditer(r"\.classList\s*\.\s*(?:add|toggle|replace)\s*\(", code):
+            expression, _ = js_expression(code, match.end(), ")")
+            add(expression)
+        for match in re.finditer(r"\.setAttribute\s*\(\s*([\"'])class\1\s*,", code):
+            expression, _ = js_expression(code, match.end())
+            add(expression)
+        for value in string_parts(code):
             for attr in re.findall(r"class\s*=\s*\\?[\"']([^\"'\\]*)", value):
                 tokens.extend(attr.split())
             for attr in re.findall(r"class\s*=\s*([\w-]+)", value):
