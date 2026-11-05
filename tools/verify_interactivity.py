@@ -235,7 +235,9 @@ def check_native_smooth_scroll(css, js):
         rule = css_code.rfind("{", 0, position)
         opened = max(css_code.rfind("}", 0, rule), css_code.rfind("{", 0, rule))
         selector = css_code[opened + 1:rule].strip()
-        if selector != "html":
+        # html alone, or html under the class check_deep_link_is_not_animated
+        # requires; never a section, a container, or body.
+        if not re.fullmatch(r"html(\.[\w-]+)?", selector):
             fail("scroll-behavior: smooth is set on %r; it belongs on html alone." % selector)
 
     margin = [
@@ -271,6 +273,52 @@ def check_nav_targets(facts):
             fail(
                 "#%s lacks the one-page-section class, so its nav link never "
                 "highlights." % target
+            )
+
+
+def check_deep_link_is_not_animated(css, js):
+    """A deep link must land below the header, not short of it.
+
+    Found driving issue 31. With scroll-behavior: smooth on html from the
+    first paint, Chrome animates the initial jump to a URL's fragment, and it
+    fixes the animation's end point when it starts. The page is still moving
+    then: the portfolio cards render from projects.json and Lato arrives
+    from Google Fonts, both above #contact. So /#contact ended its animation
+    with the section 11px below the top at 375px and 37px at 1440px, under
+    the 63px header, where an instant jump re-resolves against the final
+    layout and lands flush.
+
+    So smooth scrolling has to start only once the page has loaded: every
+    scroll-behavior: smooth must sit on html qualified by a class, and
+    js/main.js must be what adds that class to the root element.
+    """
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    classes = set()
+    for match in re.finditer(r"scroll-behavior\s*:\s*smooth", css_code):
+        rule = css_code.rfind("{", 0, match.start())
+        opened = max(css_code.rfind("}", 0, rule), css_code.rfind("{", 0, rule))
+        selector = css_code[opened + 1:rule].strip()
+        gated = re.fullmatch(r"html\.([\w-]+)", selector)
+        if gated is None:
+            fail(
+                "scroll-behavior: smooth is on %r from the first paint, so the "
+                "initial jump to a URL fragment animates toward a target the "
+                "loading page then moves, and /#contact lands under the header. "
+                "Put it on html.<class> and add the class from js/main.js once "
+                "the page has loaded." % selector
+            )
+        else:
+            classes.add(gated.group(1))
+    for name in sorted(classes):
+        added = re.search(
+            r"document\.documentElement\.classList\.add\(\s*([\"'])%s\1\s*\)" % re.escape(name),
+            js_code,
+        )
+        if added is None:
+            fail(
+                "css/style.css gates smooth scrolling on html.%s, but js/main.js "
+                "never adds that class to the root element, so nav links jump." % name
             )
 
 
@@ -407,6 +455,7 @@ def main():
     check_script_tag(facts)
     check_nav_toggle(facts)
     check_native_smooth_scroll(css, js)
+    check_deep_link_is_not_animated(css, js)
     check_nav_targets(facts)
     check_progress_bars(facts)
     check_card_handler(html, css)
