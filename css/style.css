@@ -10,17 +10,16 @@
 Table of content
 --------------------------------------------------------
 1. General Styles (typography, links, Lsits, images , Helper classes, sections)
-2. Pre Loader
-3. Navigation
-4. Home
-5. About
-6. Services
-7. Work
-8. Clients
-9. Contact
-10. Footer
-11. Mediaqueries
-12. keyframes animation
+2. Navigation
+3. Home
+4. About
+5. Services
+6. Work
+7. Clients
+8. Contact
+9. Footer
+10. Mediaqueries
+11. keyframes animation
 ------------------------------------------------------*/
 
 /*----------------------------------------
@@ -282,8 +281,8 @@ select:focus-visible {
    fill is the inverse of .submit-btn, white on the site's near-black rather
    than the other way round, because at scroll top this lands over the hero
    photo and the transparent nav, where a light panel carries further than a
-   dark one. z-index has to beat .nav-wrapper at 20 and .loader-con at 99, or
-   the link takes focus behind one of them and the user sees nothing. */
+   dark one. z-index has to beat .nav-wrapper at 20, or the link takes focus
+   behind the header and the user sees nothing. */
 .skip-link {
     position: absolute;
     top: -100px;
@@ -457,47 +456,6 @@ img {
     width: 50px;
     height: 2px;
     background-color: #444444;
-}
-
-
-/*----------------------------------------
-Pre Loader
-----------------------------------------*/
-.loader-con {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: #fdfdfd;
-    z-index: 99;
-}
-
-.loader-con .spinner {
-    width: 50px;
-    height: 50px;
-}
-
-.double-bounce1, .double-bounce2 {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background-color: #333;
-    opacity: 0.6;
-    top: 0;
-    left: 0;
-    -webkit-border-radius: 50%;
-    -moz-border-radius: 50%;
-    border-radius: 50%;
-    -webkit-animation: sk-bounce 2.0s infinite ease-in-out;
-    -moz-animation: sk-bounce 2.0s infinite ease-in-out;
-    animation: sk-bounce 2.0s infinite ease-in-out;
-}
-
-.double-bounce2 {
-    -webkit-animation-delay: -1.0s;
-    -moz-animation-delay: -1.0s;
-    animation-delay: -1.0s;
 }
 
 
@@ -1894,42 +1852,6 @@ Mediaqueries
 /*----------------------------------------
 keyframes animation
 ----------------------------------------*/
-
-/* PreLoader Animations*/
-@-webkit-keyframes sk-bounce {
-    0%, 100% {
-        -webkit-transform: scale(0.0);
-        transform: scale(0.0);
-    }
-    50% {
-        -webkit-transform: scale(1.0);
-        transform: scale(1.0);
-    }
-}
-
-@-moz-keyframes sk-bounce {
-    0%, 100% {
-        -moz-transform: scale(0.0);
-        transform: scale(0.0);
-    }
-    50% {
-        -moz-transform: scale(1.0);
-        transform: scale(1.0);
-    }
-}
-
-@keyframes sk-bounce {
-    0%, 100% {
-        -webkit-transform: scale(0.0);
-        -moz-transform: scale(0.0);
-        transform: scale(0.0);
-    }
-    50% {
-        -webkit-transform: scale(1.0);
-        -moz-transform: scale(1.0);
-        transform: scale(1.0);
-    }
-}
 
 /*Smooth Scroll Button animation*/
 @-webkit-keyframes dot-animation {
