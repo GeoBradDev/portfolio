@@ -748,6 +748,100 @@ def inline_scripts(source):
     return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
 
 
+def strip_js_comments(code):
+    """JavaScript with its /* */ and // comments removed, strings intact.
+
+    Quote-aware: a // or /* inside a string literal, such as "https://..."
+    or a path with a doubled slash, is part of the string and is kept. A
+    comment that quotes code, such as `// icon(name) returns an inline
+    <svg>`, is gone before any scan reads the code. Regular expression
+    literals are not recognized; the scripts here have none that hold a
+    quote or a //.
+    """
+    out = []
+    index, length = 0, len(code)
+    quote = None
+    while index < length:
+        char = code[index]
+        if quote:
+            out.append(char)
+            if char == "\\" and index + 1 < length:
+                out.append(code[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "\"'`":
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if code.startswith("/*", index):
+            end = code.find("*/", index + 2)
+            index = length if end == -1 else end + 2
+            continue
+        if code.startswith("//", index):
+            end = code.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+class MarkupFacts(HTMLParser):
+    """Class tokens, stylesheet links, and inline styles, read by a real parser.
+
+    Regexes for class="..." and href="css/..." missed single-quoted and
+    unquoted attributes and root-absolute hrefs.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.classes = []
+        self.sheets = []
+        self.styles = []
+        self._in_style = False
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        self.classes.extend(attr.get("class", "").split())
+        if tag == "link" and "stylesheet" in attr.get("rel", "").lower().split():
+            self.sheets.append(attr.get("href", "").strip())
+        if tag == "style":
+            self._in_style = True
+            self.styles.append("")
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        self._in_style = False
+
+    def handle_endtag(self, tag):
+        if tag == "style":
+            self._in_style = False
+
+    def handle_data(self, data):
+        if self._in_style:
+            self.styles[-1] += data
+
+
+def markup_facts(source):
+    facts = MarkupFacts()
+    facts.feed(source)
+    facts.close()
+    return facts
+
+
+def local_sheet(href):
+    """The repo path a first-party stylesheet href names, or None if off-site."""
+    if re.match(r"\s*(?:[a-z][a-z0-9+.-]*:|//)", href, re.I):
+        return None
+    path = ROOT / re.sub(r"^(?:\./|/)", "", href.split("?")[0].split("#")[0])
+    return path if path.is_file() else None
+
+
 def check_renderer_icons_are_hidden():
     """The portfolio cards build their icons at runtime, out of the parser's reach.
 
@@ -765,11 +859,11 @@ def check_renderer_icons_are_hidden():
     source = read_markup_or_fail(INDEX)
     if source is None:
         return
-    script = "\n".join(inline_scripts(source))
+    script = strip_js_comments("\n".join(inline_scripts(source)))
 
-    site = re.compile(
-        r"createElementNS\(\s*([\"'])http://www\.w3\.org/2000/svg\1\s*,\s*([\"'])svg\2\s*\)"
-    )
+    # Any namespace argument: a literal, or a constant holding it. The local
+    # name "svg" is what makes the element an <svg>.
+    site = re.compile(r"createElementNS\(\s*[^,()]+,\s*([\"'])svg\1\s*\)")
     sites = list(site.finditer(script))
     if not check(
         bool(sites),
@@ -784,7 +878,7 @@ def check_renderer_icons_are_hidden():
     # the scope the helper works in.
     for number, match in enumerate(sites, start=1):
         assigned = re.search(
-            r"(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*document\.$",
+            r"(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)*$",
             script[:match.start()],
         )
         if not check(
@@ -798,8 +892,9 @@ def check_renderer_icons_are_hidden():
         for attribute, value in (("aria-hidden", "true"), ("focusable", "false")):
             check(
                 re.search(
-                    r"(?<![\w$.])%s\.setAttribute\(\s*([\"'])%s\1\s*,\s*([\"'])%s\2\s*\)"
-                    % (re.escape(name), re.escape(attribute), value),
+                    r"(?<![\w$.])%s\.setAttribute(?:NS\(\s*(?:null|\"\"|'')\s*,|\()"
+                    r"\s*([\"'])%s\1\s*,\s*(?:([\"'])%s\2|%s)\s*\)"
+                    % (re.escape(name), re.escape(attribute), value, value),
                     scope,
                 )
                 is not None,
@@ -903,6 +998,43 @@ def check_form_controls_are_labelled():
         )
 
 
+ZERO_LENGTH = re.compile(r"[-+]?0*\.?0+(?:[a-z%]+)?")
+
+
+def paints_ring(prop, value, body):
+    """Whether a focus declaration paints anything in normal rendering.
+
+    An outline paints nothing when its style is none or hidden, its width is
+    zero, or its color is transparent (the forced-colors technique, which
+    shows only when the OS replaces colors). A box-shadow list paints nothing
+    when every shadow in it is transparent or has no offset, blur, or spread.
+    """
+    tokens = value.split()
+    if prop.startswith("outline"):
+        color = re.search(r"(?<![-\w])outline-color\s*:\s*([^;}]+)", body)
+        if color and "transparent" in color.group(1).lower():
+            return False
+        if prop == "outline-width":
+            return not all(ZERO_LENGTH.fullmatch(t) for t in tokens)
+        if {"none", "hidden", "transparent"} & set(tokens):
+            return False
+        if any(ZERO_LENGTH.fullmatch(t) for t in tokens):
+            return False
+        return bool(tokens)
+    if value in ("none", "") or prop != "box-shadow":
+        return False
+    shadows = re.split(r",(?![^()]*\))", value)
+    for shadow in shadows:
+        parts = shadow.split()
+        if "transparent" in parts:
+            continue
+        lengths = [t for t in parts if re.fullmatch(r"[-+]?\d*\.?\d+(?:[a-z%]+)?", t)]
+        if lengths and all(ZERO_LENGTH.fullmatch(t) for t in lengths):
+            continue
+        return True
+    return False
+
+
 def check_skip_link_and_focus_visibility():
     """A skip link nobody can see is a skip link nobody can use.
 
@@ -986,11 +1118,12 @@ def check_skip_link_and_focus_visibility():
         page = read_markup(path)
         if page is None:
             continue
-        sheets = re.findall(r"<style\b[^>]*>(.*?)</style>", page, re.S | re.I)
-        for href in re.findall(r'<link\b[^>]*\bhref\s*=\s*"(css/[^"]+\.css)"', page, re.I):
-            linked = read(ROOT / href)
-            if linked is not None:
-                sheets.append(linked)
+        facts = markup_facts(page)
+        sheets = list(facts.styles)
+        for href in facts.sheets:
+            local = local_sheet(href)
+            if local is not None:
+                sheets.append(read(local))
         for sheet in sheets:
             sheet = without_comments(sheet, "css")
             for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", sheet):
@@ -1011,7 +1144,7 @@ def check_skip_link_and_focus_visibility():
                         if declared is None:
                             continue
                         value = re.sub(r"!\s*important", "", declared.group(1)).strip().lower()
-                        if value not in ("none", "0", "0px"):
+                        if paints_ring(prop, value, body):
                             offenders.append("%s: %s { %s }" % (path.name, part, prop))
     check(
         not offenders,
@@ -1051,21 +1184,35 @@ LOCAL_CLASSES = (
 
 
 def script_class_tokens(source):
-    """Class tokens an inline script can put in the DOM.
+    """Class tokens an inline script puts in the DOM, read where classes go.
 
-    Every whitespace-separated word of every string literal, which covers
-    el("div", "a b") and className = "a b", plus the value of any class
-    attribute written inside a literal, which covers an innerHTML string like
-    "<p class='x'>" where splitting on whitespace alone yields class='x'>.
+    Only class-bearing positions: the second argument of the renderer's
+    el(tag, className, text), assignments to .className, string arguments of
+    classList.add/toggle/replace, setAttribute("class", ...), and class
+    attributes inside an HTML string. Every word of every string used to
+    count, which made card prose such as "works well" read as Bootstrap's
+    .well class.
     """
     tokens = []
     for body in inline_scripts(source):
-        for _, literal in re.findall(r"([\"'`])((?:(?!\1).)*)\1", body):
-            tokens.extend(literal.split())
-            for value in re.findall(r"class\s*=\s*[\"']([^\"']*)[\"']", literal):
+        code = strip_js_comments(body)
+        literal = r"([\"'`])((?:(?!\1).)*)\1"
+        for match in re.finditer(r"\bel\(\s*[^,()]+,\s*" + literal, code):
+            tokens.extend(match.group(2).split())
+        for match in re.finditer(r"\.className\s*\+?=\s*" + literal, code):
+            tokens.extend(match.group(2).split())
+        for match in re.finditer(r"\.classList\s*\.\s*(?:add|toggle|replace)\(([^)]*)\)", code):
+            for _, value in re.findall(literal, match.group(1)):
                 tokens.extend(value.split())
-            for value in re.findall(r"class\s*=\s*([\w-]+)", literal):
-                tokens.append(value)
+        for match in re.finditer(
+            r"setAttribute\(\s*([\"'])class\1\s*,\s*([\"'`])((?:(?!\2).)*)\2", code
+        ):
+            tokens.extend(match.group(3).split())
+        for _, value in re.findall(literal, code):
+            for attr in re.findall(r"class\s*=\s*\\?[\"']([^\"'\\]*)", value):
+                tokens.extend(attr.split())
+            for attr in re.findall(r"class\s*=\s*([\w-]+)", value):
+                tokens.append(attr)
     return tokens
 
 
@@ -1082,11 +1229,10 @@ def check_no_bootstrap_classes():
         source = read_markup(path)
         if source is None:
             continue
-        tokens = script_class_tokens(source)
-        for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
-            tokens.extend(value.split())
+        facts = markup_facts(source)
+        tokens = script_class_tokens(source) + facts.classes
         owned = set()
-        styles = "\n".join(re.findall(r"<style\b[^>]*>(.*?)</style>", source, re.S | re.I))
+        styles = "\n".join(facts.styles)
         for token, pages in SITE_OWNED_CLASSES.items():
             if path.name in pages and re.search(
                 r"(?m)^\s*\.%s\s*\{" % re.escape(token), without_comments(styles, "css")
@@ -1110,16 +1256,24 @@ def check_no_bootstrap_classes():
     if source is None or css is None:
         return
     css = without_comments(css, "css")
-    used = set(script_class_tokens(source))
-    for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
-        used.update(value.split())
+    used = set(script_class_tokens(source)) | set(markup_facts(source).classes)
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css)
     for name in LOCAL_CLASSES:
         if name not in used:
             continue
-        check(
-            re.search(r"\.%s(?![\w-])[^{}]*\{" % re.escape(name), css) is not None,
-            "index.html's .%s has a rule in css/style.css" % name,
-        )
+        # A rule that styles the element itself: some selector whose subject
+        # (last compound) carries the class with no pseudo-class or
+        # pseudo-element after it, and that declares something. .sr-only:hover
+        # or .navbar-header::before do not style the element at rest.
+        styled = False
+        for selector, body in rules:
+            if not re.search(r"[\w-]\s*:", body):
+                continue
+            for part in selector.split(","):
+                subject = re.split(r"\s*[>+~]\s*|\s+", part.strip())[-1]
+                if re.search(r"\.%s(?![\w-])" % re.escape(name), subject) and ":" not in subject:
+                    styled = True
+        check(styled, "index.html's .%s has a rule in css/style.css" % name)
 
 
 def grouped_rule_body(css, first_selector):
