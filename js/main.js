@@ -11,10 +11,12 @@
   No library. Issue #31 deleted js/jquery.min.js and js/bootstrap.min.js,
   127 KB loaded to run the few dozen lines below.
 
-  Smooth scrolling is not here at all. The browser does it: css/style.css
-  sets scroll-behavior: smooth on html, only when the visitor has not asked
-  for reduced motion, and a scroll-margin-top on every section so a fragment
-  lands below the fixed header. Nothing here may cancel a nav link's click
+  Smooth scrolling is the browser's. css/style.css sets scroll-behavior:
+  smooth on html.smooth-scroll, only when the visitor has not asked for
+  reduced motion, and a scroll-margin-top on every section so a fragment
+  lands below the fixed header. The one part that lives here is adding the
+  smooth-scroll class, a frame after load (see onLoad below), so a deep
+  link's first jump is instant. Nothing here may cancel a nav link's click
   or scroll the page itself, or it fights that and loses the hash update.
 
 =========================================================================*/

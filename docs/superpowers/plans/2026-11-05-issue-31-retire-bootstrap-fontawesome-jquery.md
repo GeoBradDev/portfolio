@@ -38,8 +38,11 @@ From the issue, verbatim:
 Made checkable for this run:
 
 - C1a. No file in the tree is named or referenced as `jquery`, `bootstrap`, `font-awesome`,
-  `fontawesome`, or `glyphicons`, except as a removed-asset entry or prose in a verifier or
-  CLAUDE.md. `js/jquery.min.js`, `js/bootstrap.min.js`, `css/bootstrap.min.css`,
+  `fontawesome`, or `glyphicons`, except as a removed-asset entry, prose in a verifier or
+  CLAUDE.md, or an explanatory comment in a site file that says something true about the
+  retirement (for example why a rule exists, or the sprite attribution task 1 requires,
+  which names `fonts/fontawesome-webfont.svg` at 0c26ed0). Widened in review round 1: the
+  narrower wording ruled out comments the plan itself asks for. `js/jquery.min.js`, `js/bootstrap.min.js`, `css/bootstrap.min.css`,
   `css/font-awesome.min.css`, and every file in `fonts/` are deleted (the directory holds
   nothing else). Every `<script src>` on every page is first-party (today: `js/main.js`
   only), and every stylesheet link is `css/style.css` or Google Fonts (a font, not a runtime
@@ -296,6 +299,14 @@ As built:
   baseline as well (#services, #portfolio, #contact from mid page).
 - `navHeight()` subtracts the open menu only while the toggle is shown, so a menu left open
   across a resize to 1440 does not shrink the probe there.
+- Deliberate departure, recorded in review round 1: a second toggle click inside the 350ms
+  animation reverses it (the pending animation snaps to its end, then the new one runs),
+  where Bootstrap ignored clicks while transitioning. It always ends in the state the last
+  click asked for, and a link tapped mid-open now lands flush below the header. Driven at
+  375: origin/main ignored the second tap and ended open with `aria-expanded="true"`, and a
+  link tapped 150ms into the open animation left the menu open with `#about` at 218px under
+  a 279px header (the reviewer measured 431px with different timing); the branch ends
+  closed and lands `#about` at 63px.
 - Defect found by the task 5 edge path, fixed under a frozen test
   (`verify_interactivity.check_deep_link_is_not_animated`, commit 11085d1): with
   `scroll-behavior: smooth` on bare `html` from the first paint, Chrome animates the initial

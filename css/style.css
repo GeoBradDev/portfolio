@@ -236,6 +236,10 @@ h6 {
     font-size: 16px;
 }
 
+/* Links take the color of the text around them, with no underline, in
+   every state; the rules for each link set any color of their own. Without
+   this the browser's default blue, underlined link shows wherever a rule
+   below does not name a color. */
 a, a:focus, a:hover, a:active {
     text-decoration: none;
     color: inherit;
@@ -670,18 +674,9 @@ Navigation
     transition: all .28s ease-in-out;
 }
 
-.nav-wrapper .nav > li > a:hover,
-.nav-wrapper .nav > li > a.active {
-    background-color: transparent;
-}
-
 .nav-wrapper .nav > li > a:hover:after,
 .nav-wrapper .nav > li > a.active:after {
     width: 80%;
-}
-
-.nav-wrapper .nav > li > a:focus {
-    background-color: transparent;
 }
 
 .nav-sticky {
