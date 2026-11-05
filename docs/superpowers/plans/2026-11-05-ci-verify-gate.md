@@ -48,15 +48,32 @@ blocked, or deploy gated") are met by this diff together with that settings step
 8. A PR that breaks a verifier (for example a removed `alt`) makes the replayed command
    sequence exit non-zero; the clean tree exits zero. Shown locally, then by the PR's own run.
 9. `verify_security.py` gains `check_ci_workflow()`, standard library only, which fails when:
-   the workflow is missing; the set of `tools/verify_*.py` it runs differs from the set on disk
-   (a seventh verifier added, or one dropped); any is run twice or with `--check-links`;
-   `permissions: contents: read` is absent or any `write` permission appears; a `secrets.`
-   reference appears; a `uses:` is unpinned or pinned to a branch; `setup-node` is missing (the
-   inline-script and `js/main.js` `node --check` gates skip silently without node); the job id
-   `verify` is missing; either trigger is missing. As built it also fails on: `write-all`; a
-   `GITHUB_TOKEN` reference; `setup-python` missing; a job-level `name:` on `verify`, which
-   would change the reported check name; and a push trigger that does not name `main`. YAML
-   comments are stripped first, so a comment quoting a rule neither satisfies nor trips it.
+   - the workflow is missing (the rest is then skipped, no traceback);
+   - there is no job with id `verify` at `jobs:`, or it has a `name:` override, quoted or not,
+     which would change the reported check name;
+   - inside the `verify` job, the set of verifiers run differs from `tools/verify_*.py` on disk
+     (a seventh added, or one dropped), or one runs twice. A verifier counts only as a step
+     whose `run:` is exactly `python3 tools/verify_x.py`; a step that mentions a verifier any
+     other way (only in a `name:`, `echo ...`, `... || true`, a `run: |` block) fails;
+   - a verifier step's `if:` is anything but `${{ !cancelled() }}` or `${{ always() }}`, or
+     `continue-on-error` appears anywhere;
+   - a `uses:` is not `actions/checkout`, `actions/setup-python`, or `actions/setup-node`, or
+     is not pinned to `@v<major>[.minor[.patch]]` or a 40-hex SHA;
+   - `setup-node` or `setup-python` is missing from the `verify` job (the inline-script and
+     `js/main.js` `node --check` gates skip silently without node), or the job's checkout
+     step lacks `persist-credentials: false`;
+   - the indent-0 `permissions:` block lacks `contents: read`, or write is granted anywhere
+     (block, flow `{ contents: write }`, `write-all`, job level);
+   - the word `secrets`, `GITHUB_TOKEN`, or `github.token` appears;
+   - `--check-links`, `pip install`, `pip3 install`, `npm`, `npx`, `curl`, or `wget` appears;
+   - `pull_request_target` appears; `pull_request` is missing or carries `paths`,
+     `paths-ignore`, or `types`; `push` is missing, lacks a `branches:` list with the item
+     `main`, or carries `branches-ignore`, `tags`, `tags-ignore`, `paths`, or `paths-ignore`.
+
+   Structural matching reads the file with all comments stripped. The forbidden-token scans
+   read it with only whole-line comments removed, so a trailing comment quoting a forbidden
+   token fails the check (the safe direction) and a quoted `' #'` cannot hide one. Block
+   style is expected; flow-style triggers or a quoted job id fail closed.
 10. CLAUDE.md describes how the gate runs: the "Important Notes" bullet no longer says the
     verifiers are only run by hand, and a section explains the workflow, the stable `verify`
     check name, and the branch protection as configured (required check `verify`, PRs
@@ -111,6 +128,9 @@ blocked, or deploy gated") are met by this diff together with that settings step
 
 - Criteria 1 to 7, 9: `check_ci_workflow()` in `verify_security.py`, shown red without the
   workflow and under each mutation, green with it.
+  A must-pass set (block-style `- main`, `[main, dev]`, `${{ always() }}`, a trailing
+  comment on a run line, whole-line comments quoting forbidden tokens) shows it is not
+  over-tight on the shapes it accepts.
 - Criterion 8: the local replay output (clean exit 0, broken `alt` exit non-zero), then the PR's
   own `verify` run going green on GitHub.
 - Criterion 10: the CLAUDE.md diff, reviewed by the doc finder.
