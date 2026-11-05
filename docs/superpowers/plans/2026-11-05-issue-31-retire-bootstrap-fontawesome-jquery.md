@@ -376,6 +376,31 @@ Then the CSS. Method, so nothing Bootstrap supplied is lost silently:
 
 Commit: `feat: replace the Bootstrap 3 stylesheet with local layout rules`.
 
+As built:
+- The inventory was the fallback the plan names: a `getComputedStyle` diff of every element
+  and its `::before`/`::after`, with and without `bootstrap.min.css`, at 375 (closed, open)
+  and 1440.
+- One grid pattern for every former `.row`: the row's -15px margins on the grid, the
+  column's 15px padding on each item, `align-items: start` (a stretched item would grow the
+  skills panel's background). `.contact-col` is `display: flow-root`, because the float it
+  replaced contained `#contact-form`'s 50px top margin. The 3-column tracks are
+  `33.33333333%`, Bootstrap's own percentage, not `1fr`: it resolves 1/64px narrower, and the
+  text in the second and third contact columns rasterized differently at the exact third.
+- The form grid is `padding: 0 15px; column-gap: 30px`, fields in `.form-field` (positioned,
+  for the sr-only labels), the textarea and button spanning both columns. `.submit-btn`
+  loses `clear: both`; the textarea keeps its 68px.
+- The footer's `.row` became `.footer-row` with the same -15px margins: dropping them
+  narrowed the copyright paragraph by 30px, which at 375 changes where it can wrap.
+- `.clear-float` (an empty element in a grid) is deleted with its rule; the separator spans
+  the grid on its own.
+- Deliberate visible changes, both from Bootstrap rules not carried over: the mobile toggle
+  now shows the site's 2px keyboard focus ring (Bootstrap's `.navbar-toggle:focus { outline:
+  0 }` hid every ring on it), colored white over the hero and dark on the sticky bar like the
+  links; and the renderer's empty-state text is `#5a6268`, the loading text's color, where
+  `.text-muted` was `#777`, 4.3:1 on the section's `#f8f9fa`.
+- Not carried over: Bootstrap's `@media print` block, which only `index.html` loaded.
+  `resume.html`, the page that gets printed, never loaded Bootstrap and keeps its own.
+
 ### Task 4: Delete the files and update the asset lists
 
 Red first, `verify_assets.py`: move `js/jquery.min.js`, `js/bootstrap.min.js`,

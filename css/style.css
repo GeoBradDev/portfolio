@@ -24,6 +24,151 @@ Table of content
 ------------------------------------------------------*/
 
 /*----------------------------------------
+Base
+
+What bootstrap.min.css supplied that this site actually renders, written
+here by intent rather than copied, so that removing Bootstrap 3 in issue 31
+moved nothing. Measured, not guessed: a computed-style diff of every element
+on index.html with and without the Bootstrap stylesheet, at 375px (menu open
+and closed) and 1440px, listed what survived the cascade, and a pixel diff
+against origin/main checked the result. It sits first so everything below
+overrides it, exactly as style.css used to override Bootstrap by loading
+after it.
+----------------------------------------*/
+
+html {
+    font-size: 10px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+*,
+*::before,
+*::after {
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+h1, h2, h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+h4, h5, h6 {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+p {
+    margin: 0 0 10px;
+}
+
+img {
+    vertical-align: middle;
+    border: 0;
+}
+
+label {
+    display: inline-block;
+    max-width: 100%;
+    margin-bottom: 5px;
+    font-weight: 700;
+}
+
+button,
+input,
+select,
+textarea {
+    margin: 0;
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    overflow: visible;
+    text-transform: none;
+}
+
+button,
+input[type="button"],
+input[type="reset"],
+input[type="submit"] {
+    -webkit-appearance: button;
+    appearance: button;
+    cursor: pointer;
+}
+
+textarea {
+    overflow: auto;
+}
+
+/* 750, 970, and 1170px at Bootstrap 3's breakpoints, 15px gutters. */
+.container {
+    padding-right: 15px;
+    padding-left: 15px;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+@media (min-width: 768px) {
+    .container {
+        width: 750px;
+    }
+}
+
+@media (min-width: 992px) {
+    .container {
+        width: 970px;
+    }
+}
+
+@media (min-width: 1200px) {
+    .container {
+        width: 1170px;
+    }
+}
+
+/* The clearfix Bootstrap put on these. The nav floats the brand and the link
+   list inside them, and each has to wrap its floats. */
+.container::before,
+.container::after,
+.navbar-header::before,
+.navbar-header::after,
+.navbar-collapse::before,
+.navbar-collapse::after,
+.nav::before,
+.nav::after {
+    content: " ";
+    display: table;
+}
+
+.container::after,
+.navbar-header::after,
+.navbar-collapse::after,
+.nav::after {
+    clear: both;
+}
+
+/* Visually hidden, still announced: the contact form's labels and the
+   toggle's name. Unstyled, the labels would render and push the form apart. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+.text-center {
+    text-align: center;
+}
+
+/*----------------------------------------
 General Styles
 ----------------------------------------*/
 
@@ -112,17 +257,6 @@ select:focus-visible {
     outline-offset: 3px;
 }
 
-/* bootstrap.min.css carries `a:focus { outline: 5px auto -webkit-focus-ring-color }`
-   at the same (0,1,1) specificity as the rule above, and style.css loads after
-   it, so the deleted `outline: none` was the only thing suppressing it. Without
-   this, a mouse click on any anchor paints a 5px ring that stays until blur,
-   which is exactly what the rule above says it avoids. Keyed on :focus so it
-   reaches Bootstrap's declaration, and excluded on :focus-visible so it never
-   touches the keyboard ring. */
-a:focus:not(:focus-visible) {
-    outline: none;
-}
-
 /* Over the hero photo, a #232323 ring disappears into the image. The nav sits
    on the hero too while it is transparent. Everywhere else on the site the
    surface is white or near-white, so the default dark ring is the readable
@@ -130,11 +264,13 @@ a:focus:not(:focus-visible) {
    the moment the page scrolls past 100px, which is when a visitor is most
    likely to be tabbing it. A white ring on either is invisible. */
 .home-1 a:focus-visible,
-.nav-wrapper a:focus-visible {
+.nav-wrapper a:focus-visible,
+.nav-wrapper button:focus-visible {
     outline-color: #fff;
 }
 
-.nav-sticky a:focus-visible {
+.nav-sticky a:focus-visible,
+.nav-sticky button:focus-visible {
     outline-color: #232323;
 }
 
@@ -364,6 +500,125 @@ Pre Loader
 /*----------------------------------------
 Navigation
 ----------------------------------------*/
+
+/* The navbar geometry Bootstrap 3 supplied: a 50px bar, the 44x34 toggle with
+   its three 22x2 bars, links 10px tall-padded in the mobile menu and 15px
+   inline from 768px up, the link list floated right. The rules after this
+   block restyle it, as they used to restyle Bootstrap's. */
+.nav {
+    padding-left: 0;
+    margin-bottom: 0;
+    list-style: none;
+}
+
+.nav > li {
+    position: relative;
+    display: block;
+}
+
+.nav > li > a {
+    position: relative;
+    display: block;
+    padding: 10px 15px;
+}
+
+.navbar-brand {
+    float: left;
+    height: 50px;
+    padding: 15px;
+    font-size: 18px;
+    line-height: 20px;
+}
+
+.navbar-toggle {
+    position: relative;
+    float: right;
+    padding: 9px 10px;
+    margin-top: 8px;
+    margin-right: 15px;
+    margin-bottom: 8px;
+    background-color: transparent;
+    background-image: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.navbar-toggle .icon-bar {
+    display: block;
+    width: 22px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.navbar-toggle .icon-bar + .icon-bar {
+    margin-top: 4px;
+}
+
+.navbar-collapse {
+    padding-right: 15px;
+    padding-left: 15px;
+    overflow-x: visible;
+    border-top: 1px solid transparent;
+    -webkit-box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+    -webkit-overflow-scrolling: touch;
+}
+
+.container > .navbar-header,
+.container > .navbar-collapse {
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+.navbar-nav {
+    margin: 7.5px -15px;
+}
+
+.navbar-nav > li > a {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    line-height: 20px;
+}
+
+@media (min-width: 768px) {
+    .navbar-header {
+        float: left;
+    }
+
+    .navbar-toggle {
+        display: none;
+    }
+
+    .navbar-collapse {
+        width: auto;
+        padding-bottom: 0;
+        border-top: 0;
+        -webkit-box-shadow: none;
+        box-shadow: none;
+    }
+
+    .container > .navbar-header,
+    .container > .navbar-collapse {
+        margin-right: 0;
+        margin-left: 0;
+    }
+
+    /* Bootstrap's .navbar-right, folded in: the list is always on the right. */
+    .navbar-nav {
+        float: right;
+        margin: 0 -15px 0 0;
+    }
+
+    .navbar-nav > li {
+        float: left;
+    }
+
+    .navbar-nav > li > a {
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+}
+
 .nav-wrapper {
     width: 100%;
     padding: 6px 0;
@@ -781,6 +1036,79 @@ Home
 /*----------------------------------------
 About
 ----------------------------------------*/
+
+/* Layout grids. Each replaces a Bootstrap .row of floated columns and keeps
+   the positions it produced: the -15px side margins of the row and the 15px
+   padding of each column, so content lands where it did. A grid item contains
+   its children's margins the way a floated column did, and align-items: start
+   keeps each item as tall as its content, as a float was; stretched, the
+   skills panel's background would grow to the height of the copy beside it. */
+.about-grid,
+.about-contact,
+.services-grid,
+.contact-row,
+.footer-row {
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+/* The float the column used to be was a block formatting context, which kept
+   #contact-form's 50px top margin inside it. Before the grid rule, which the
+   contact detail column overrides it with. */
+.contact-col {
+    display: flow-root;
+}
+
+.about-grid,
+.about-contact,
+.services-grid,
+.contact-items {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+}
+
+.about-col,
+.about-contact > *,
+.service-col,
+.contact-col,
+.contact-cell {
+    position: relative;
+    min-height: 1px;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+@media (min-width: 768px) {
+    .about-contact {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    /* Bootstrap's percentage, not 1fr: 33.33333333% of the row resolves a
+       sixty-fourth of a pixel narrower than a third, and the text in the
+       second and third columns was rasterized at that offset. */
+    .contact-items {
+        grid-template-columns: repeat(3, 33.33333333%);
+    }
+}
+
+@media (min-width: 992px) {
+    .about-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .services-grid {
+        grid-template-columns: repeat(3, 33.33333333%);
+    }
+
+    /* Ten twelfths wide, one twelfth in: Bootstrap's col-md-10 col-md-offset-1,
+       as fractions of the row. */
+    .contact-col {
+        width: 83.33333333%;
+        margin-left: 8.33333333%;
+    }
+}
+
 .about-content h2 {
     margin-bottom: 30px;
     text-transform: capitalize;
@@ -956,8 +1284,9 @@ Services
     border-left: none;
 }
 
-.clear-float {
-    clear: both !important;
+/* A full-width row of the services grid, between the two rows of three. */
+.services-separator {
+    grid-column: 1 / -1;
 }
 
 .services-separator {
@@ -1300,11 +1629,36 @@ Contact
     word-break: break-all;
 }
 
+/* A grid since issue 31, in place of Bootstrap's floated columns: name and
+   email side by side from 768px, the message and the button full width. The
+   15px padding and 30px gap put every field where the column gutters did. */
 #contact-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 30px;
     margin-top: 50px;
+    padding-right: 15px;
+    padding-left: 15px;
 }
 
-/* The margin-bottom here and the margin-top on .submit-btn below replace
+@media (min-width: 768px) {
+    #contact-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Positioned, so each visually hidden label is placed inside its own field,
+   as it was inside the column. */
+.form-field {
+    position: relative;
+}
+
+.form-field-wide,
+#contact-form .submit-btn {
+    grid-column: 1 / -1;
+}
+
+/* The margin-bottom here and the one on textarea.input-field below replace
    spacing that used to come from the empty validation spans, deleted in
    issue 18 because nothing ever wrote to them. They were dead as content but
    not weightless: each was display:block with margin-top:8px plus .mb-30's
@@ -1323,12 +1677,10 @@ Contact
 
 textarea.input-field {
     height: 190px;
-    /* The gap before the button has to live here, not as a margin-top on
-       .submit-btn. Every field sits in a floated grid column, so the button's
-       static position is the top of the form and clear: both below turns any
-       margin-top it declares into clearance, which absorbs it entirely. The
-       textarea's column is the last float, so its bottom margin is what the
-       button actually clears past. 68px here measures 76px on screen, which
+    /* The gap before the button. The textarea is inline-level inside its
+       grid item, so this margin is part of that item's line box, which the
+       grid item contains just as the floated column it replaced did. 68px
+       here measures 76px on screen, the line box adding its descent, which
        is what the deleted #form-message and .message-error used to produce. */
     margin-bottom: 68px;
     resize: none;
@@ -1336,11 +1688,9 @@ textarea.input-field {
 
 .submit-btn {
     display: block;
-    /* What used to push the button below the floated field columns was
-       #form-message, itself a full-width float, now deleted. Without this the
-       button's position falls out of float overlap rules rather than out of
-       anything declared. */
-    clear: both;
+    /* The button is the form grid's last row, spanning both columns; the
+       auto side margins center it there. It used to need clear: both to get
+       below the floated field columns, and nothing floats now. */
     margin: 0 auto;
     padding: 8px 20px;
     font-size: 16px;
@@ -1636,25 +1986,35 @@ keyframes animation
   with insertAdjacentHTML on every page load, which delayed styling until the
   script ran and kept the browser from caching it separately from the page.
 
-  style.css loads after bootstrap.min.css, and this block is at the end of
-  style.css, so it sits exactly where the injected block used to: after
-  everything it overrides. The !important flags on #github-projects and
-  .portfolio-item are load-bearing against Bootstrap's .row and column rules.
+  This block is at the end of style.css, after everything it overrides.
+  #github-projects and .portfolio-item used to carry !important on every
+  declaration to beat Bootstrap's .row and column classes; issue 31 removed
+  both Bootstrap and those classes, so nothing competes with them now.
 --------------------------------------------------*/
 
 /* Portfolio Grid Layout */
 #github-projects {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    margin: 0 -15px !important;
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0 -15px;
     justify-content: center;
 }
 
 .portfolio-item {
-    flex: 0 0 33.333% !important;
-    max-width: 33.333% !important;
-    padding: 0 15px 30px 15px !important;
-    box-sizing: border-box !important;
+    flex: 0 0 33.333%;
+    max-width: 33.333%;
+    padding: 0 15px 30px 15px;
+}
+
+/* The full-width row the renderer writes for its empty and error states. */
+.portfolio-status {
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding: 0 15px;
+}
+
+.portfolio-empty {
+    color: #5a6268;
 }
 
 /* Portfolio Card Design */
@@ -1850,15 +2210,15 @@ keyframes animation
 /* Responsive Design */
 @media (max-width: 992px) {
     .portfolio-item {
-        flex: 0 0 50% !important;
-        max-width: 50% !important;
+        flex: 0 0 50%;
+        max-width: 50%;
     }
 }
 
 @media (max-width: 768px) {
     .portfolio-item {
-        flex: 0 0 100% !important;
-        max-width: 100% !important;
+        flex: 0 0 100%;
+        max-width: 100%;
     }
 
     .portfolio-card {
