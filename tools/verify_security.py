@@ -35,10 +35,14 @@ same indent), rather than guessing.
 
 Issue 31 retired jQuery, Bootstrap, and Font Awesome and changed three checks.
 check_no_end_of_life_library replaced the jQuery version floor: every script a
-page loads is under js/, every stylesheet (and every as=style preload) is
-under css/ or from Google Fonts, and nothing names a retired library.
-check_css_imports_are_first_party holds the same line inside the
-stylesheets, for @import and url(). check_icons_are_inline_svg replaced the
+page loads (and every modulepreload or as=script preload) is under js/, every
+stylesheet (and every as=style preload) is under css/ or from Google Fonts,
+every other preload or prefetch stays on the site, no page has a <base>,
+nothing names a retired library, no script imports or loads code from a
+literal off-site URL, and no first-party file loaded carries a retired
+library's banner. check_css_imports_are_first_party holds the same line
+inside the stylesheets, for @import (with or without a space) and every
+url() or quoted string. check_icons_are_inline_svg replaced the
 single-Font-Awesome-version check: no Font Awesome stylesheet or class
 anywhere, and every icon a page or the portfolio renderer draws resolves to a
 <symbol> on that page. Markup is read with html.parser, so attribute quoting
@@ -121,8 +125,29 @@ FONT_FILE_HOSTS = ("https://fonts.googleapis.com/", "https://fonts.gstatic.com/"
 
 # A first-party path: relative, or root-absolute, with no scheme and no
 # protocol-relative // host.
-FIRST_PARTY_SCRIPT = re.compile(r"/?js/[\w./-]+\.js")
-FIRST_PARTY_SHEET = re.compile(r"/?css/[\w./-]+\.css")
+FIRST_PARTY_SCRIPT = re.compile(r"(?:\./|/)?js/[\w./-]+\.js")
+FIRST_PARTY_SHEET = re.compile(r"(?:\./|/)?css/[\w./-]+\.css")
+
+# Off the site: a scheme (https:, http:, anything but data:) or a
+# protocol-relative //host.
+OFF_SITE = re.compile(r"\s*(?:(?!data:)[a-z][a-z0-9+.-]*:|//)", re.I)
+
+# The opening banner each retired library ships with. A first-party file that
+# carries one is a vendored copy under a neutral name.
+LIBRARY_BANNERS = re.compile(
+    r"\bjQuery\s+(?:JavaScript Library\s+)?v\d|\bBootstrap\s+v\d|Font Awesome\s+[\d.]+\s+by\s+@davegandy"
+    r"|\bglyphicons-halflings",
+    re.I,
+)
+
+# A literal off-site URL a script hands to the module loader or to a src.
+SCRIPT_FETCHES = re.compile(
+    r"""\bimport\s*(?:\(\s*)?(['"`])(?:[a-z][a-z0-9+.-]*:|//)"""
+    r"""|\bfrom\s*(['"`])(?:[a-z][a-z0-9+.-]*:|//)"""
+    r"""|\.src\s*=\s*(['"`])(?:[a-z][a-z0-9+.-]*:|//)"""
+    r"""|setAttribute\(\s*(['"])src\4\s*,\s*(['"`])(?:[a-z][a-z0-9+.-]*:|//)""",
+    re.I,
+)
 
 
 class PageAssets(HTMLParser):
@@ -145,6 +170,7 @@ class PageAssets(HTMLParser):
         self.symbols = set()   # id of every <symbol>
         self.classes = []      # every class token
         self.links = []        # href of every <link>, whatever its rel
+        self.bases = []        # href of every <base>
         self._in_style = False
 
     def handle_starttag(self, tag, attrs):
@@ -159,8 +185,12 @@ class PageAssets(HTMLParser):
             kind = attr.get("as", "").strip().lower()
             if "stylesheet" in rel or ({"preload", "prefetch"} & set(rel) and kind == "style"):
                 self.sheets.append(href)
-            elif {"preload", "modulepreload", "prefetch"} & set(rel):
+            elif "modulepreload" in rel:
+                self.preloads.append(("script", href))
+            elif {"preload", "prefetch"} & set(rel):
                 self.preloads.append((kind, href))
+        elif tag == "base":
+            self.bases.append(attr.get("href", "").strip())
         elif tag == "style":
             self._in_style = True
             self.styles.append("")
@@ -233,6 +263,23 @@ def check_no_end_of_life_library():
             % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
         )
 
+        # Every other link that fetches (preload or prefetch of an image, a
+        # font, anything) stays on the site, or on Google Fonts' hosts.
+        others = [href for kind, href in assets.preloads if kind != "script"]
+        foreign = [href for href in others if OFF_SITE.match(href) and not href.startswith(FONT_FILE_HOSTS)]
+        check(
+            not foreign,
+            "%s preloads and prefetches only from the site%s"
+            % (name, " (not: %s)" % ", ".join(foreign) if foreign else ""),
+        )
+
+        # A <base> rebases every relative URL on the page, so js/main.js and
+        # css/style.css would resolve to wherever it points.
+        check(
+            not assets.bases,
+            "%s has no <base>%s" % (name, " (has %s)" % ", ".join(assets.bases) if assets.bases else ""),
+        )
+
         everything = scripts + assets.sheets + [href for _, href in assets.preloads]
         retired = [ref for ref in everything if RETIRED_LIBRARIES.search(ref)]
         check(
@@ -241,22 +288,59 @@ def check_no_end_of_life_library():
             % (name, " (loads %s)" % ", ".join(retired) if retired else ""),
         )
 
+        # Scripts can fetch scripts: an inline module importing from a CDN, a
+        # dynamic import(), or a created <script> given an off-site src.
+        # Literal URLs only; a URL built at runtime is beyond a text scan.
+        bodies = [("inline script %d" % n, body) for n, body in enumerate(_inline_script_bodies(source), start=1)]
+        for src in scripts:
+            if FIRST_PARTY_SCRIPT.fullmatch(src):
+                text = read(ROOT / re.sub(r"^(?:\./|/)", "", src))
+                if text is not None:
+                    bodies.append((src, text))
+        fetching = [label for label, body in bodies if SCRIPT_FETCHES.search(_strip_js_comments(body))]
+        check(
+            not fetching,
+            "%s: no script imports or loads code from off the site%s"
+            % (name, " (in %s)" % ", ".join(fetching) if fetching else ""),
+        )
+
+        # A retired library vendored under a neutral name still carries its
+        # banner. Read every first-party script and stylesheet the page loads.
+        vendored = []
+        for ref in scripts + assets.sheets:
+            if FIRST_PARTY_SCRIPT.fullmatch(ref) or FIRST_PARTY_SHEET.fullmatch(ref):
+                text = read(ROOT / re.sub(r"^(?:\./|/)", "", ref))
+                if text is not None and LIBRARY_BANNERS.search(text):
+                    vendored.append(ref)
+        check(
+            not vendored,
+            "%s loads no file carrying a jQuery, Bootstrap, or Font Awesome banner%s"
+            % (name, " (%s)" % ", ".join(vendored) if vendored else ""),
+        )
+
 
 def _css_imports_and_urls(css):
-    """(every @import target, every url() value) in a stylesheet, comments out.
+    """(every @import target, every URL-like value) in a stylesheet, comments out.
 
-    url() is read quote-aware, so the card grain's data: SVG, which carries
-    url(%23grain) inside its own quoted value, is one value and not two.
+    @import is matched with or without whitespace after it (`@import"x";` is
+    valid CSS). The URL-like values are every url() argument and every quoted
+    string, read in order so that a quoted value is consumed whole: the card
+    grain's data: SVG carries url(%23grain) and an xmlns string inside its own
+    quotes, and is one value. Quoted strings matter because image-set() and
+    @import accept a bare string where other places want url().
     """
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    value = r"""url\(\s*(?:(['"])(.*?)\1|([^'")\s]*))\s*\)|(['"])(.*?)\4"""
     imports = []
-    for match in re.finditer(r"@import\s+(?:" + value + r")", css, re.S | re.I):
+    for match in re.finditer(
+        r"""@import\s*(?:url\(\s*(?:(['"])(.*?)\1|([^'")\s]*))\s*\)|(['"])(.*?)\4)""", css, re.S | re.I
+    ):
         imports.append(match.group(2) or match.group(3) or match.group(5) or "")
-    urls = []
-    for match in re.finditer(r"""url\(\s*(?:(['"])(.*?)\1|([^'")\s]*))\s*\)""", css, re.S | re.I):
-        urls.append((match.group(2) if match.group(1) else match.group(3)) or "")
-    return imports, urls
+    if re.search(r"""@import(?!\s*(?:url\(|['"]))""", css, re.I):
+        imports.append("(an @import this check cannot read)")
+    values = []
+    for match in re.finditer(r"""(['"])(.*?)\1|url\(\s*([^'")\s]+)\s*\)""", css, re.S | re.I):
+        values.append(match.group(2) if match.group(1) else match.group(3))
+    return imports, values
 
 
 def check_css_imports_are_first_party():
@@ -301,8 +385,7 @@ def check_css_imports_are_first_party():
         for ref in urls:
             if ref.startswith("data:"):
                 continue
-            third_party = re.match(r"[a-z][a-z0-9+.-]*:|//", ref, re.I) is not None
-            if (third_party and not ref.startswith(FONT_FILE_HOSTS)) or RETIRED_LIBRARIES.search(ref):
+            if (OFF_SITE.match(ref) and not ref.startswith(FONT_FILE_HOSTS)) or RETIRED_LIBRARIES.search(ref):
                 foreign.append(ref)
         check(
             not foreign,
@@ -492,6 +575,49 @@ def _without_html_comments(source):
     return re.sub(r"<!--.*?-->", "", source, flags=re.S)
 
 
+def _strip_js_comments(code):
+    """JavaScript with its /* */ and // comments removed, strings intact.
+
+    Quote-aware: a // or /* inside a string literal, such as "https://..."
+    or a path with a doubled slash, is part of the string and is kept. A
+    comment that quotes code, such as `// icon(name) returns an inline
+    <svg>`, is gone before any scan reads the code. Regular expression
+    literals are not recognized; the scripts here have none that hold a
+    quote or a //.
+    """
+    out = []
+    index, length = 0, len(code)
+    quote = None
+    while index < length:
+        char = code[index]
+        if quote:
+            out.append(char)
+            if char == "\\" and index + 1 < length:
+                out.append(code[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "\"'`":
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if code.startswith("/*", index):
+            end = code.find("*/", index + 2)
+            index = length if end == -1 else end + 2
+            continue
+        if code.startswith("//", index):
+            end = code.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def _inline_script_bodies(source):
     """Every inline <script> body that holds JavaScript rather than data."""
     tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script>", re.S)
@@ -542,7 +668,7 @@ def check_icons_are_inline_svg():
         # The renderer sets classes from string literals, which the markup
         # scan above never sees: el("i", "fa fa-star") was exactly that.
         for body in _inline_script_bodies(source):
-            for _, literal in re.findall(r"([\"'`])((?:(?!\1).)*)\1", body):
+            for _, literal in re.findall(r"([\"'`])((?:(?!\1).)*)\1", _strip_js_comments(body)):
                 # Words of the literal, plus any class attribute written
                 # inside one, as in an innerHTML string "<i class='fa x'>".
                 words = literal.split()
@@ -578,7 +704,7 @@ def check_icons_are_inline_svg():
 
     index = pages.get("index.html")
     if index is not None:
-        script = "\n".join(_inline_script_bodies(index))
+        script = _strip_js_comments("\n".join(_inline_script_bodies(index)))
         symbols = page_assets(index).symbols
         # Every call, not every literal call: icon(name) with a variable can
         # name anything, and only a literal can be resolved here. The helper's
