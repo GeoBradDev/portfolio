@@ -247,7 +247,8 @@ structure. Required behaviors:
 - `stickyNav()`: `.nav-sticky` at `scrollY >= 100`, `.show-up-btn` at `>= 1000`.
 - Smooth scroll is native: no click handler on `a.scroll` and no handler on `.scroll-up`.
   The `href="#"` on `.scroll-up` scrolls to the top natively. CSS:
-  `@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }` and
+  `@media (prefers-reduced-motion: no-preference) { html.smooth-scroll { scroll-behavior: smooth; } }`
+  (the class added after load; see As built) and
   `.one-page-section { scroll-margin-top: 63px; }` where 63px is the collapsed sticky header
   height measured in task 0 at both widths (6px padding top and bottom plus the 50px navbar
   plus the 1px border). If task 0 measures a different value at either width, use a media
@@ -293,6 +294,12 @@ As built:
   baseline as well (#services, #portfolio, #contact from mid page).
 - `navHeight()` subtracts the open menu only while the toggle is shown, so a menu left open
   across a resize to 1440 does not shrink the probe there.
+- Defect found by the task 5 edge path, fixed under a frozen test
+  (`verify_interactivity.check_deep_link_is_not_animated`, commit 11085d1): with
+  `scroll-behavior: smooth` on bare `html` from the first paint, Chrome animates the initial
+  jump to `/#contact` toward an end point fixed before the portfolio cards and Lato arrive,
+  and the section ended 11px (375) and 37px (1440) from the top, under the header. The rule
+  is `html.smooth-scroll` instead, and `main.js` adds the class a frame after `load`.
 
 ### Task 3: Replace bootstrap.min.css
 

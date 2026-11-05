@@ -101,10 +101,21 @@
             loader.style.opacity = "0";
         }
 
-        if (document.readyState === "complete") {
+        // Smooth scrolling starts here, a frame after load, and not from
+        // the first paint: see html.smooth-scroll in css/style.css. Until
+        // then a deep link's jump is instant and lands against the final
+        // layout.
+        function onLoad() {
             hideLoader();
+            window.requestAnimationFrame(function () {
+                document.documentElement.classList.add("smooth-scroll");
+            });
+        }
+
+        if (document.readyState === "complete") {
+            onLoad();
         } else {
-            window.addEventListener("load", hideLoader);
+            window.addEventListener("load", onLoad);
         }
 
 /*------------------------------------------------

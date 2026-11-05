@@ -490,9 +490,16 @@ Navigation
 /* Native smooth scrolling for every in-page link: the nav, the hero chevron,
    the skip link, and back to top. Only for a visitor who has not asked for
    reduced motion; everyone else jumps, which the jQuery version did by
-   animating over zero milliseconds. */
+   animating over zero milliseconds.
+
+   Keyed on a class js/main.js adds once the page has loaded, not on bare
+   html. From the first paint, Chrome animates the jump to a URL's fragment
+   toward an end point fixed when it starts, and the page is still moving
+   then: the portfolio cards and the webfont arrive above #contact, and
+   /#contact landed under the header. An instant jump lands against the
+   final layout. */
 @media (prefers-reduced-motion: no-preference) {
-    html {
+    html.smooth-scroll {
         scroll-behavior: smooth;
     }
 }
