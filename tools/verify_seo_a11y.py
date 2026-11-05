@@ -743,7 +743,7 @@ def check_interactive_elements_have_names():
 
 def inline_scripts(source):
     """Bodies of every inline <script> that holds JavaScript, not data."""
-    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script>", re.S | re.I)
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script[^>]*>", re.S | re.I)
     data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
     return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
 
