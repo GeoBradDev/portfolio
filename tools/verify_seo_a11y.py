@@ -21,6 +21,17 @@ of the owner decision issue 18 recorded:
 
 Neither is exempt from any check here. Both are swept by the same *.html glob
 every other verifier uses.
+
+Issue 31 replaced Font Awesome with inline SVG and Bootstrap with local CSS,
+and the checks here followed. AccessibleNames fails a leftover Font Awesome
+<i> or <span> and any <svg> not aria-hidden="true" focusable="false", and
+check_renderer_icons_are_hidden holds the same rule over the SVGs the
+portfolio renderer creates. check_no_bootstrap_classes fails a Bootstrap grid,
+utility, component, or collapse class or data attribute anywhere, including
+renderer string literals, and requires a local rule for each Bootstrap-named
+class the site kept. The skip-link check no longer asserts the
+a:focus:not(:focus-visible) rule that only existed to beat Bootstrap; it
+asserts that nothing paints an outline or box-shadow on plain :focus.
 """
 
 import json
@@ -55,6 +66,11 @@ CONTRAST_PAIRS = [
     (".portfolio-link-code", "#ffffff"),
     (".portfolio-link-demo", None),  # declares its own background
     (".portfolio-error", None),      # declares its own background
+    # The renderer's empty state. It sits on #portfolio's gradient, which runs
+    # from #f8f9fa to #e9ecef; measured against the darker end, so the ratio
+    # holds anywhere on it. Not declared on the rule, because a solid
+    # background would paint a box over the gradient that was never there.
+    (".portfolio-empty", "#e9ecef"),
 ]
 CONTRAST_MINIMUM = 4.5
 
@@ -470,7 +486,7 @@ def json_ld_blocks(source):
     """
     blocks = []
     pattern = re.compile(
-        r'<script\b[^>]*\btype\s*=\s*"application/ld\+json"[^>]*>(.*?)</script>',
+        r'<script\b[^>]*\btype\s*=\s*"application/ld\+json"[^>]*>(.*?)</script(?=[\s/>])[^>]*>',
         re.S | re.I,
     )
     for body in pattern.findall(source):
@@ -549,13 +565,17 @@ class AccessibleNames(HTMLParser):
     An accessible name here comes from one of four places, which is what a
     browser's accname computation actually falls back through for these
     elements: aria-label on the element, aria-labelledby on it, text inside
-    it, or the alt text of an image inside it. A Font Awesome <i> contributes
-    nothing, because the glyph is a CSS ::before on an empty element.
+    it, or the alt text of an image inside it. An icon contributes nothing:
+    every icon on the site is an inline <svg> that is hidden from assistive
+    tech, so a link whose only content is one still needs its own name.
 
-    Also flags a decorative icon that is NOT hidden from assistive tech.
-    Font Awesome 4 glyphs live in the Private Use Area, and a screen reader
-    that reaches one announces whatever its character database says, which
-    is at best nothing and at worst a wrong word ahead of the real name.
+    Also flags two icon defects. Any <svg> that is not both
+    aria-hidden="true" and focusable="false": an unhidden SVG is announced
+    as an unlabelled graphic ahead of the real name, and focusable="false"
+    keeps the legacy engines that made SVGs tab stops from adding one. And
+    any <i> or <span> still carrying a Font Awesome class (fa, fa-*): issue
+    31 removed Font Awesome, so such an element renders as nothing at all
+    and its icon has silently disappeared.
     """
 
     NAMED_BY = ("aria-label", "aria-labelledby", "title")
@@ -584,11 +604,23 @@ class AccessibleNames(HTMLParser):
         if tag == "img" and self.stack:
             if (attrs.get("alt") or "").strip():
                 self.stack[-1]["text"] += attrs["alt"]
-        if tag == "i" and "fa" in (attrs.get("class") or "").split():
+        classes = (attrs.get("class") or "").split()
+        if tag in ("i", "span") and any(
+            token == "fa" or token.startswith("fa-") for token in classes
+        ):
+            self.problems.append(
+                "line %d: <%s class=\"%s\"> is a Font Awesome icon, and Font "
+                "Awesome is no longer loaded, so it renders nothing"
+                % (self.getpos()[0], tag, " ".join(classes))
+            )
+        if tag == "svg":
             if (attrs.get("aria-hidden") or "").lower() != "true":
                 self.problems.append(
-                    'line %d: decorative <i class="fa ..."> is not aria-hidden'
-                    % self.getpos()[0]
+                    'line %d: <svg> is not aria-hidden="true"' % self.getpos()[0]
+                )
+            if (attrs.get("focusable") or "").lower() != "false":
+                self.problems.append(
+                    'line %d: <svg> is not focusable="false"' % self.getpos()[0]
                 )
 
     def handle_startendtag(self, tag, attrs):
@@ -623,9 +655,9 @@ class AccessibleNames(HTMLParser):
 
         An element that opens and never closes leaves its frame on the stack,
         and handle_endtag only judges frames it pops. Without this, adding
-        <a href="/x"><i class="fa fa-rss" aria-hidden="true"></i> with no
-        </a> ships an unnamed link past a green gate. Verified: the same
-        markup with the closing tag was reported, and without it was not.
+        <a href="/x"> holding only a hidden icon, with no </a>, ships an
+        unnamed link past a green gate. Verified: the same markup with the
+        closing tag was reported, and without it was not.
         """
         while self.stack:
             self.judge(self.stack.pop())
@@ -707,6 +739,168 @@ def check_interactive_elements_have_names():
                 fail("%s %s" % (path.name, problem))
         else:
             print("  PASS  %s names every link, button, and icon" % path.name)
+
+
+def inline_scripts(source):
+    """Bodies of every inline <script> that holds JavaScript, not data."""
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script(?=[\s/>])[^>]*>", re.S | re.I)
+    data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
+    return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
+
+
+def strip_js_comments(code):
+    """JavaScript with its /* */ and // comments removed, strings intact.
+
+    Quote-aware: a // or /* inside a string literal, such as "https://..."
+    or a path with a doubled slash, is part of the string and is kept. A
+    comment that quotes code, such as `// icon(name) returns an inline
+    <svg>`, is gone before any scan reads the code. Regular expression
+    literals are not recognized; the scripts here have none that hold a
+    quote or a //.
+    """
+    out = []
+    index, length = 0, len(code)
+    quote = None
+    while index < length:
+        char = code[index]
+        if quote:
+            out.append(char)
+            if char == "\\" and index + 1 < length:
+                out.append(code[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "\"'`":
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if code.startswith("/*", index):
+            end = code.find("*/", index + 2)
+            index = length if end == -1 else end + 2
+            continue
+        if code.startswith("//", index):
+            end = code.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+class MarkupFacts(HTMLParser):
+    """Class tokens, stylesheet links, and inline styles, read by a real parser.
+
+    Regexes for class="..." and href="css/..." missed single-quoted and
+    unquoted attributes and root-absolute hrefs.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.classes = []
+        self.sheets = []
+        self.styles = []
+        self._in_style = False
+
+    def handle_starttag(self, tag, attrs):
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        self.classes.extend(attr.get("class", "").split())
+        if tag == "link" and "stylesheet" in attr.get("rel", "").lower().split():
+            self.sheets.append(attr.get("href", "").strip())
+        if tag == "style":
+            self._in_style = True
+            self.styles.append("")
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        self._in_style = False
+
+    def handle_endtag(self, tag):
+        if tag == "style":
+            self._in_style = False
+
+    def handle_data(self, data):
+        if self._in_style:
+            self.styles[-1] += data
+
+
+def markup_facts(source):
+    facts = MarkupFacts()
+    facts.feed(source)
+    facts.close()
+    return facts
+
+
+def local_sheet(href):
+    """The repo path a first-party stylesheet href names, or None if off-site."""
+    if re.match(r"\s*(?:[a-z][a-z0-9+.-]*:|//)", href, re.I):
+        return None
+    path = ROOT / re.sub(r"^(?:\./|/)", "", href.split("?")[0].split("#")[0])
+    return path if path.is_file() else None
+
+
+def check_renderer_icons_are_hidden():
+    """The portfolio cards build their icons at runtime, out of the parser's reach.
+
+    AccessibleNames reads the markup as shipped, and the star, Live Demo, and
+    Code icons on every card do not exist until the inline renderer in
+    index.html creates them. So this reads the renderer instead. Its icons
+    have to be real SVG elements, which only createElementNS with the SVG
+    namespace makes (createElement("svg") makes an HTMLUnknownElement that
+    draws nothing), and the helper that makes them has to set aria-hidden
+    and focusable on what it creates, for the same reasons the static rule
+    gives.
+    """
+    print("\nThe portfolio renderer builds hidden SVG icons")
+
+    source = read_markup_or_fail(INDEX)
+    if source is None:
+        return
+    script = strip_js_comments("\n".join(inline_scripts(source)))
+
+    # Any namespace argument: a literal, or a constant holding it. The local
+    # name "svg" is what makes the element an <svg>.
+    site = re.compile(r"createElementNS\(\s*[^,()]+,\s*([\"'])svg\1\s*\)")
+    sites = list(site.finditer(script))
+    if not check(
+        bool(sites),
+        "the renderer creates its icons with createElementNS in the SVG namespace",
+    ):
+        return
+
+    # Every site, not the first, and the attributes bound to the variable the
+    # <svg> is assigned to: setting them on the <use> inside, or on any other
+    # element, hides nothing the screen reader sees as the graphic. The
+    # search runs from the site to the next function definition, which is
+    # the scope the helper works in.
+    for number, match in enumerate(sites, start=1):
+        assigned = re.search(
+            r"(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)*$",
+            script[:match.start()],
+        )
+        if not check(
+            assigned is not None,
+            "renderer SVG %d is assigned to a variable, so its attributes can be checked" % number,
+        ):
+            continue
+        name = assigned.group(1)
+        following = re.search(r"\bfunction\b", script[match.end():])
+        scope = script[match.end():match.end() + following.start() if following else len(script)]
+        for attribute, value in (("aria-hidden", "true"), ("focusable", "false")):
+            check(
+                re.search(
+                    r"(?<![\w$.])%s\.setAttribute(?:NS\(\s*(?:null|\"\"|'')\s*,|\()"
+                    r"\s*([\"'])%s\1\s*,\s*(?:([\"'])%s\2|%s)\s*\)"
+                    % (re.escape(name), re.escape(attribute), value, value),
+                    scope,
+                )
+                is not None,
+                'renderer SVG %d sets %s="%s" on the <svg> itself (%s)'
+                % (number, attribute, value, name),
+            )
 
 
 def check_new_tab_links_carry_rel():
@@ -804,6 +998,130 @@ def check_form_controls_are_labelled():
         )
 
 
+ZERO_LENGTH = re.compile(r"[-+]?0*\.?0+(?:[a-z%]+)?")
+LENGTH = re.compile(r"[-+]?\d*\.?\d+(?:[a-z%]+)?")
+COLOR_FUNCTIONS = {
+    "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color",
+}
+
+
+def css_tokens(value):
+    """Top-level tokens of a CSS value, a function call kept whole.
+
+    rgb(0 0 0) is one token, not three zeros. Splitting on whitespace alone
+    read the components of a color as zero widths and passed a visible ring.
+    """
+    tokens, current, depth = [], "", 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        if char.isspace() and depth == 0:
+            if current:
+                tokens.append(current)
+            current = ""
+        else:
+            current += char
+    if current:
+        tokens.append(current)
+    return tokens
+
+
+def split_top_level(value, separator=","):
+    """value split at separators outside any parentheses."""
+    parts, current, depth = [], "", 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        if char == separator and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += char
+    parts.append(current)
+    return parts
+
+
+def invisible_color(token):
+    """True for transparent and for a color function whose alpha is zero.
+
+    A fully transparent alpha, rgb(0 0 0 / 0) or rgba(0, 0, 0, 0), paints
+    nothing, exactly like the keyword. var() is unknown here and counts as
+    visible.
+    """
+    if token == "transparent":
+        return True
+    match = re.fullmatch(r"([a-z-]+)\((.*)\)", token)
+    if not match or match.group(1) not in COLOR_FUNCTIONS:
+        return False
+    inner = match.group(2)
+    if "/" in inner:
+        alpha = inner.rsplit("/", 1)[1].strip()
+    else:
+        parts = [part.strip() for part in split_top_level(inner)]
+        if len(parts) != 4:
+            return False
+        alpha = parts[3]
+    return re.fullmatch(r"[-+]?0*\.?0+%?", alpha) is not None
+
+
+def is_length(token):
+    """A width or offset token: a number with a unit, or a bare number."""
+    return LENGTH.fullmatch(token) is not None
+
+
+def paints_ring(prop, value, body):
+    """Whether a focus declaration paints anything in normal rendering.
+
+    An outline paints nothing when its style is none or hidden, its width is
+    zero, or its color is transparent or has zero alpha (the forced-colors
+    technique, which shows only when the OS replaces colors). A box-shadow
+    list paints nothing when every shadow in it is invisible in color or has
+    no offset, blur, or spread. Values are tokenized with color functions and
+    var() kept whole, so only a real width can read as zero.
+    """
+    tokens = css_tokens(value)
+    if prop.startswith("outline"):
+        color = re.search(r"(?<![-\w])outline-color\s*:\s*([^;}]+)", body)
+        if color:
+            declared = css_tokens(re.sub(r"!\s*important", "", color.group(1)).strip().lower())
+            if declared and invisible_color(declared[0]):
+                return False
+        if prop == "outline-width":
+            # Only an explicit zero length is zero. thin, medium, thick,
+            # var(), and calc() are all visible widths, so the declaration
+            # paints unless every token is a literal zero.
+            return not (tokens and all(is_length(t) and ZERO_LENGTH.fullmatch(t) for t in tokens))
+        if {"none", "hidden"} & set(tokens):
+            return False
+        if any(invisible_color(t) for t in tokens):
+            return False
+        if any(is_length(t) and ZERO_LENGTH.fullmatch(t) for t in tokens):
+            return False
+        return bool(tokens)
+    if value in ("none", "") or prop != "box-shadow":
+        return False
+    for shadow in split_top_level(value):
+        parts = css_tokens(shadow.strip())
+        if any(invisible_color(t) for t in parts):
+            continue
+        # A var(), calc(), or other non-color function where a length goes
+        # is an unknown, so possibly nonzero, length: 0 0 0 var(--ring) red
+        # is a ring.
+        unknown = [
+            t for t in parts
+            if re.fullmatch(r"[a-z-]+\(.*\)", t) and t.split("(", 1)[0] not in COLOR_FUNCTIONS
+        ]
+        lengths = [t for t in parts if is_length(t)]
+        if not unknown and lengths and all(ZERO_LENGTH.fullmatch(t) for t in lengths):
+            continue
+        return True
+    return False
+
+
 def check_skip_link_and_focus_visibility():
     """A skip link nobody can see is a skip link nobody can use.
 
@@ -873,16 +1191,296 @@ def check_skip_link_and_focus_visibility():
         % css.count(":focus-visible"),
     )
 
-    # bootstrap.min.css carries `a:focus { outline: 5px auto ... }` at the same
-    # (0,1,1) specificity, and style.css loads after it, so deleting the
-    # blanket `outline: none` unmasked it and mouse clicks painted a ring
-    # again. This is the rule that suppresses that without touching the
-    # keyboard ring, and it has to keep existing for as long as Bootstrap does.
+    # Until issue 31 this asserted an `a:focus:not(:focus-visible) { outline:
+    # none }` rule, which existed only to beat bootstrap.min.css's `a:focus {
+    # outline: 5px auto }`: with the blanket suppression deleted, that rule
+    # painted a ring on every mouse click. Bootstrap is gone, and the
+    # browser's own stylesheet keys its ring on :focus-visible, so a click
+    # paints none without any rule. What the old rule protected is asserted
+    # instead: no stylesheet a page uses sets a visible outline on plain
+    # :focus, which is the only way the click ring can come back. The skip
+    # link is exempt; its :focus rule is deliberate and sets no outline.
+    offenders = []
+    for path in HTML_PAGES:
+        page = read_markup(path)
+        if page is None:
+            continue
+        facts = markup_facts(page)
+        sheets = list(facts.styles)
+        for href in facts.sheets:
+            local = local_sheet(href)
+            if local is not None:
+                sheets.append(read(local))
+        for sheet in sheets:
+            sheet = without_comments(sheet, "css")
+            for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", sheet):
+                for part in selector.split(","):
+                    part = part.strip()
+                    if ":focus" not in part or ":focus-visible" in part:
+                        continue
+                    if part.startswith(".skip-link"):
+                        continue
+                    # !important does not change what is painted, so it is
+                    # stripped before comparing: `outline: none !important`
+                    # paints nothing. A box-shadow is a ring too, and a plain
+                    # :focus rule paints it on every mouse click.
+                    for prop in ("outline", "outline-style", "outline-width", "box-shadow"):
+                        declared = re.search(
+                            r"(?<![-\w])%s\s*:\s*([^;}]+)" % prop, body
+                        )
+                        if declared is None:
+                            continue
+                        value = re.sub(r"!\s*important", "", declared.group(1)).strip().lower()
+                        if paints_ring(prop, value, body):
+                            offenders.append("%s: %s { %s }" % (path.name, part, prop))
     check(
-        re.search(r"a:focus:not\(:focus-visible\)\s*\{[^}]*outline\s*:\s*none", css, re.S)
-        is not None,
-        "css/style.css suppresses Bootstrap's mouse-click a:focus ring",
+        not offenders,
+        "no stylesheet paints an outline or box-shadow on plain :focus, so a mouse click shows no ring%s"
+        % (" (found %s)" % "; ".join(sorted(set(offenders))) if offenders else ""),
     )
+
+
+# Bootstrap 3's grid, utilities, and collapse plugin markup. Issue 31 removed
+# bootstrap.min.css and its JavaScript, so any of these left in the markup
+# styles nothing and does nothing.
+BOOTSTRAP_CLASS = re.compile(
+    r"col-(?:xs|sm|md|lg)-\d+|col-(?:xs|sm|md|lg)-(?:offset|push|pull)-\d+|row|collapse"
+    r"|text-(?:muted|left|right|justify|primary|success|info|warning|danger)"
+    r"|navbar-(?:right|left|default|inverse|fixed-top|fixed-bottom|static-top|form|btn|text|link)"
+    r"|pull-(?:left|right)|center-block|clearfix|img-(?:responsive|rounded|circle|thumbnail)"
+    r"|btn|btn-[\w-]+|(?:hidden|visible)-[\w-]+|glyphicon|glyphicon-[\w-]+"
+    r"|well|well-[\w-]+|panel|panel-[\w-]+|label-[\w-]+|badge|caret|dropdown|dropdown-[\w-]+"
+    r"|list-(?:unstyled|inline)"
+)
+
+# Bootstrap class names a page already uses as its own, with the page that
+# styles it. thanks.html and 404.html each declare .panel in their own inline
+# <style> for their one content box; neither ever loaded Bootstrap. The
+# exemption holds only while that rule exists.
+SITE_OWNED_CLASSES = {
+    "panel": ("thanks.html", "404.html"),
+}
+
+# Class names Bootstrap used to style that index.html still uses as the
+# site's own. Each must now have a rule in css/style.css: an unstyled sr-only,
+# for one, silently renders its label visible and pushes the form apart.
+LOCAL_CLASSES = (
+    "container", "sr-only", "text-center", "navbar-header", "navbar-collapse",
+    "navbar-nav", "navbar-toggle", "navbar-brand", "icon-bar", "nav",
+)
+
+
+CONTINUES_AFTER = set("+-*/%?:&|=,(<>!^~")
+CONTINUES_BEFORE = set("?:+-*/%&|.,=<>^")
+
+
+def js_expression(code, start, stops=",)", statement=False):
+    """(text, end) of the JavaScript expression starting at code[start].
+
+    It ends at the first character in stops that sits outside every bracket
+    and string, so el(String("span"), a ? "b" : "c") splits into its two
+    arguments correctly. Strings, template literals, and nested calls are
+    stepped over whole. Line breaks do not end it: a ternary or a
+    concatenation broken across lines, as Prettier writes them, is one
+    expression. With statement=True (the right side of an assignment), a
+    line break ends it only where the statement ends without a semicolon:
+    the line before does not end in an operator and the next does not start
+    with one.
+    """
+    depth, index, length = 0, start, len(code)
+    while index < length:
+        char = code[index]
+        if statement and char == "\n" and depth == 0:
+            before = code[start:index].rstrip()
+            after = code[index:].lstrip()
+            if before and after and before[-1] not in CONTINUES_AFTER and after[0] not in CONTINUES_BEFORE:
+                break
+        if char in "\"'`":
+            index = skip_js_string(code, index)
+            continue
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and char in stops:
+            break
+        index += 1
+    return code[start:index], index
+
+
+def skip_js_string(code, start):
+    """Index just past the string or template literal opening at code[start]."""
+    quote, index, length = code[start], start + 1, len(code)
+    while index < length:
+        char = code[index]
+        if char == "\\":
+            index += 2
+            continue
+        if quote == "`" and code.startswith("${", index):
+            _, index = js_expression(code, index + 2, "}")
+            index += 1
+            continue
+        if char == quote:
+            return index + 1
+        index += 1
+    return length
+
+
+def string_parts(expression):
+    """Every static string piece in an expression.
+
+    Each quoted literal whole, each template literal's static text, and the
+    strings inside its ${} parts, so a ternary, a concatenation, or a
+    template yields every class name it can produce.
+    """
+    parts, index, length, braces = [], 0, len(expression), 0
+    while index < length:
+        char = expression[index]
+        if char == "{":
+            braces += 1
+        elif char == "}":
+            braces = max(0, braces - 1)
+        if char in "\"'":
+            end = skip_js_string(expression, index)
+            # An operand of a comparison is a value being tested, not a
+            # class: tag === "dropdown", "badge" !== kind. So is an object
+            # key, a literal followed by a colon inside braces.
+            before = expression[:index].rstrip()
+            after = expression[end:].lstrip()
+            compared = re.search(r"[=!]==?$", before) or re.match(r"[=!]==?", after)
+            keyed = braces > 0 and after.startswith(":")
+            if not (compared or keyed):
+                parts.append(expression[index + 1:end - 1])
+            index = end
+        elif char == "`":
+            end = skip_js_string(expression, index)
+            body = expression[index + 1:end - 1]
+            static, inner = "", 0
+            while inner < len(body):
+                if body.startswith("${", inner):
+                    nested, close = js_expression(body, inner + 2, "}")
+                    parts.extend(string_parts(nested))
+                    static += " "
+                    inner = close + 1
+                    continue
+                static += body[inner]
+                inner += 1
+            parts.append(static)
+            index = end
+        else:
+            index += 1
+    return parts
+
+
+def script_class_tokens(source):
+    """Class tokens an inline script puts in the DOM, read where classes go.
+
+    Only class-bearing positions, each read as a whole expression: the
+    second argument of the renderer's el(tag, className, text), the right
+    side of .className = or +=, every argument of classList.add, toggle, or
+    replace (only the first argument of toggle, whose second is the force
+    flag), the value argument of setAttribute("class", ...), and class
+    attributes inside an HTML string. Every string piece of those
+    expressions counts, so a ternary, a concatenation, or a template literal
+    cannot carry a class past the scan, except the operands of a comparison
+    and object keys, which are tested values rather than classes. Strings anywhere else are not read:
+    every word of every string used to count, which made card prose such as
+    "works well" read as Bootstrap's .well class.
+    """
+    tokens = []
+
+    def add(expression):
+        for part in string_parts(expression):
+            tokens.extend(part.split())
+
+    for body in inline_scripts(source):
+        code = strip_js_comments(body)
+        for match in re.finditer(r"\bel\s*\(", code):
+            _, comma = js_expression(code, match.end())
+            if comma < len(code) and code[comma] == ",":
+                expression, _ = js_expression(code, comma + 1)
+                add(expression)
+        for match in re.finditer(r"\.className\s*\+?=(?!=)", code):
+            expression, _ = js_expression(code, match.end(), ";,)", statement=True)
+            add(expression)
+        for match in re.finditer(r"\.classList\s*\.\s*(?:add|replace)\s*\(", code):
+            expression, _ = js_expression(code, match.end(), ")")
+            add(expression)
+        # toggle's second argument is the force flag, not a class.
+        for match in re.finditer(r"\.classList\s*\.\s*toggle\s*\(", code):
+            expression, _ = js_expression(code, match.end())
+            add(expression)
+        for match in re.finditer(r"\.setAttribute\s*\(\s*([\"'])class\1\s*,", code):
+            expression, _ = js_expression(code, match.end())
+            add(expression)
+        for value in string_parts(code):
+            for attr in re.findall(r"class\s*=\s*\\?[\"']([^\"'\\]*)", value):
+                tokens.extend(attr.split())
+            for attr in re.findall(r"class\s*=\s*([\w-]+)", value):
+                tokens.append(attr)
+    return tokens
+
+
+def check_no_bootstrap_classes():
+    """No Bootstrap class is left behind, and the ones the site kept are its own.
+
+    Swept over every page and over the string literals in each page's inline
+    scripts, because the portfolio renderer builds its cards' class names
+    there, out of the markup scan's reach.
+    """
+    print("\nNo Bootstrap class or attribute survives, and kept class names are styled")
+
+    for path in HTML_PAGES:
+        source = read_markup(path)
+        if source is None:
+            continue
+        facts = markup_facts(source)
+        tokens = script_class_tokens(source) + facts.classes
+        owned = set()
+        styles = "\n".join(facts.styles)
+        for token, pages in SITE_OWNED_CLASSES.items():
+            if path.name in pages and re.search(
+                r"(?m)^\s*\.%s\s*\{" % re.escape(token), without_comments(styles, "css")
+            ):
+                owned.add(token)
+        found = sorted(set(t for t in tokens if BOOTSTRAP_CLASS.fullmatch(t)) - owned)
+        check(
+            not found,
+            "%s uses no Bootstrap grid, utility, or collapse class%s"
+            % (path.name, " (found %s)" % ", ".join(found) if found else ""),
+        )
+        attributes = sorted(set(re.findall(r"\b(data-toggle|data-target)\s*=", source)))
+        check(
+            not attributes,
+            "%s carries no Bootstrap data attribute%s"
+            % (path.name, " (found %s)" % ", ".join(attributes) if attributes else ""),
+        )
+
+    source = read_markup(INDEX)
+    css = read(STYLE_CSS)
+    if source is None or css is None:
+        return
+    css = without_comments(css, "css")
+    used = set(script_class_tokens(source)) | set(markup_facts(source).classes)
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+    for name in LOCAL_CLASSES:
+        if name not in used:
+            continue
+        # A rule that styles the element itself: some selector whose subject
+        # (last compound) carries the class with no pseudo-class or
+        # pseudo-element after it, and that declares something. .sr-only:hover
+        # or .navbar-header::before do not style the element at rest.
+        styled = False
+        for selector, body in rules:
+            if not re.search(r"[\w-]\s*:", body):
+                continue
+            for part in selector.split(","):
+                subject = re.split(r"\s*[>+~]\s*|\s+", part.strip())[-1]
+                if re.search(r"\.%s(?![\w-])" % re.escape(name), subject) and ":" not in subject:
+                    styled = True
+        check(styled, "index.html's .%s has a rule in css/style.css" % name)
 
 
 def grouped_rule_body(css, first_selector):
@@ -1150,9 +1748,11 @@ def main():
     check_homepage_has_person_structured_data()
     check_images_have_alt_text()
     check_interactive_elements_have_names()
+    check_renderer_icons_are_hidden()
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()
+    check_no_bootstrap_classes()
     check_focus_ring_contrast()
     check_site_root_files()
     check_text_contrast()

@@ -40,6 +40,25 @@ DEAD_ASSETS = [
     "img/PORTRAIT_Cropped.jpg",
     "img/cesium.png",
     "img/qr_code.png",
+    # End-of-life libraries retired by issue 31, with the fonts they shipped.
+    # jQuery 3.x was held there only by Bootstrap 3, which cannot run on 4;
+    # main.js is vanilla, the layout is css/style.css, and the icons are an
+    # inline SVG sprite, so none of these is loaded by anything.
+    "js/jquery.min.js",
+    "js/bootstrap.min.js",
+    "css/bootstrap.min.css",
+    "css/font-awesome.min.css",
+    "fonts/FontAwesome.otf",
+    "fonts/fontawesome-webfont.eot",
+    "fonts/fontawesome-webfont.svg",
+    "fonts/fontawesome-webfont.ttf",
+    "fonts/fontawesome-webfont.woff",
+    "fonts/fontawesome-webfont.woff2",
+    "fonts/glyphicons-halflings-regular.eot",
+    "fonts/glyphicons-halflings-regular.svg",
+    "fonts/glyphicons-halflings-regular.ttf",
+    "fonts/glyphicons-halflings-regular.woff",
+    "fonts/glyphicons-halflings-regular.woff2",
 ]
 
 # Basenames that must not appear anywhere in css/style.css. Only the two the
@@ -75,17 +94,12 @@ HOMEPAGE_ASSETS = [
     # The portfolio data, fetched by the inline renderer on every load since
     # issue 20 replaced its three GitHub API calls with one same-origin file.
     "projects.json",
-    "css/bootstrap.min.css",
-    "css/font-awesome.min.css",
     "css/style.css",
-    "js/jquery.min.js",
-    "js/bootstrap.min.js",
     "js/main.js",
     "img/hero-1280.webp",
     "img/portrait-340.webp",
     "img/favicon.ico",
     "img/Bluesky.svg",
-    "fonts/fontawesome-webfont.woff2",
 ]
 
 failures = []

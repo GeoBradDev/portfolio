@@ -15,11 +15,10 @@ Static portfolio website for GeoBrad.dev (Brad Stricherz) - a geospatial softwar
 
 ## Technology Stack
 
-- **Frontend**: Vanilla HTML5, CSS3, JavaScript (jQuery-based)
-- **CSS Framework**: Bootstrap 3.x
-- **Key Libraries**:
-  - jQuery 3.7.1 (js/jquery.min.js)
-  - Bootstrap 3.4.1 (css/bootstrap.min.css, js/bootstrap.min.js)
+- **Frontend**: Vanilla HTML5, CSS3, JavaScript. No framework and no third-party runtime library.
+- **Layout**: CSS grid and flex rules in `css/style.css`. The only external stylesheet is Google
+  Fonts (Lato), which is a font, not a library.
+- **Icons**: inline SVG, from a hidden `<symbol>` sprite on each page that uses them
 - **Deployment**: GitHub Pages with custom domain (CNAME)
 
 Owl Carousel, Magnific Popup, Isotope, imagesLoaded, jQuery Typer, and Particles.js
@@ -27,29 +26,41 @@ were removed in issue #15. None of them had a matching element on any page, so a
 of them downloaded and did nothing. Do not reintroduce a library without an element
 that actually uses it.
 
-The file shipped jQuery 2.2.4 for two years while this document claimed 3.x, which left
-CVE-2020-11022, CVE-2020-11023, and CVE-2019-11358 open (issue #17). It is now 3.7.1, and
-`tools/verify_security.py` asserts the version in the file against the version named here, so
-the claim cannot drift again. Bootstrap 3.3.7 is the release that added jQuery 3 support; do
-not downgrade one without the other.
+jQuery 3.7.1, Bootstrap 3.4.1, and Font Awesome 4.7.0 were removed in issue #31. Bootstrap 3 and
+Font Awesome 4 are end of life, and jQuery was pinned to its maintenance-only 3.x line by
+Bootstrap, which cannot run on jQuery 4. The site used all three for very little: Bootstrap's
+JavaScript drove one collapse, jQuery drove `js/main.js`, and about twenty glyphs came from Font
+Awesome. Their files and the `fonts/` directory are gone, and `tools/verify_assets.py` lists them
+as dead assets so that a copy coming back fails the gate. In `tools/verify_security.py`,
+`check_no_end_of_life_library` holds every `<script src>` and script or module preload to `js/`,
+every stylesheet and style preload to `css/` or Google Fonts, and every other preload or
+prefetch to the site or Google Fonts, and rejects `<base>`, off-site
+imports in scripts, and a vendored library's banner in any first-party script or stylesheet a
+page loads; `check_css_imports_are_first_party` rejects a third-party `@import` or `url()`. Adding a library means
+changing that check first, deliberately.
 
-Bootstrap is 3.4.1, the final 3.x release. 3.3.7 carried CVE-2018-14040, CVE-2018-14041,
-CVE-2018-14042, and CVE-2019-8331, XSS through `data-*` attributes in collapse, scrollspy, affix,
-tooltip, and popover. None was exploitable here, since every attribute is authored, but scanners
-flag the version. Both files are byte-identical to the npm `bootstrap@3.4.1` tarball and match the
-official SRI hashes; the Glyphicons fonts did not change between the two releases. Bootstrap 3 is
-end of life and does not support jQuery 4, so jQuery stays on 3.x.
+Icons are Font Awesome 4.7's own outlines, extracted once from the deleted SVG font into a
+`<svg aria-hidden="true" focusable="false" style="display:none">` sprite of `<symbol id="icon-NAME">` elements,
+one sprite per page (`index.html` and `resume.html`), with an SIL OFL 1.1 attribution comment
+above each. An icon is `<svg class="icon icon-NAME" aria-hidden="true" focusable="false"><use
+href="#icon-NAME"></use></svg>`; the portfolio renderer builds the same with `icon(name)` via
+`createElementNS`. `privacy.html`, `thanks.html`, and `404.html` have no sprite, so an icon added
+to one of them needs its symbol added with it. Rules the verifiers hold:
 
-Font Awesome is 4.7.0, served locally from `css/font-awesome.min.css` and `fonts/`, linked from
-`index.html` and `resume.html`. `privacy.html`, `thanks.html`, and `404.html` carry `<link>` tags
-but no `fa-` icons, so none of them links the stylesheet or needs it; do not add an icon to any of
-them without adding the link. Every `fa` icon on the two pages that do use them carries
-`aria-hidden="true"`, because the glyph is a CSS `::before` on an empty element and its Private
-Use Area codepoint is announced as whatever the screen reader's character database says.
-`tools/verify_seo_a11y.py` rejects one without it.
-`resume.html` used to pull 6.5.1 from cdnjs, twice and without SRI, which meant two icon
-majors, two syntaxes, and a third party on the critical path. Use bare `fa fa-*` classes; the
-FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rejects them.
+- Every `<svg>`, static or built by the renderer, carries `aria-hidden="true"` and
+  `focusable="false"` (`verify_seo_a11y.py`). Every icon-only control keeps its `aria-label`.
+- Every `<use href="#icon-X">` and every `icon("X")` resolves to a `<symbol id="icon-X">` on the
+  same page, and `icon()` takes only a string literal so the name can be checked
+  (`verify_security.check_icons_are_inline_svg`). A missing symbol renders an empty box with no
+  error anywhere else.
+- No `fa`, `fa-*`, `fas`, `fab`, `far`, or `fal` class anywhere, and no Bootstrap grid or utility
+  class (`col-*`, `row`, `pull-*`, `btn`, `hidden-*`, `clearfix`, and the rest of `BOOTSTRAP_CLASS` in
+  `verify_seo_a11y.py`). A class `index.html` keeps with a local rule (`LOCAL_CLASSES`:
+  `container`, `sr-only`, `text-center`, `nav`, `icon-bar`, the `navbar-*` names) must have a
+  rule that styles it at rest in `css/style.css`.
+- An icon's width comes from a per-icon `.icon-NAME` rule, because an inline SVG with no width
+  attribute is 300px wide. `resume.html` sizes its icons with `.glyph`, since `.icon` there
+  already means the blue color and the 8px margin, and the PDF button's icon has to stay white.
 
 ## Site Structure
 
@@ -62,8 +73,8 @@ FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rej
   carries the head.
 - `thanks.html` - Contact form confirmation page. Standalone, no JavaScript.
 - `404.html` - Served by GitHub Pages for any unmatched path. Standalone, no JavaScript, and
-  carries its own copy of `thanks.html`'s four style rules rather than pulling in Bootstrap for
-  one panel. Its favicon `href` is root-absolute, unlike every other page's: Pages serves this
+  carries its own copy of `thanks.html`'s four style rules rather than pulling in
+  `css/style.css` for one panel. Its favicon `href` is root-absolute, unlike every other page's: Pages serves this
   document at the URL that was requested, without redirecting, so a relative href resolves
   against the mistyped path.
 - `robots.txt` - Allows everything and names the sitemap. Deliberately Disallows nothing; see
@@ -76,16 +87,17 @@ FA5/FA6 `fas`/`fab`/`far` style classes render nothing here and the verifier rej
 - `js/main.js` - Navigation, scroll, and skill-bar logic. Loaded by `index.html` only.
 - `img/` - Images including profile photo, badges (Cesium certification, QR code), and
   `og-card.jpg`, the 1200x630 link-unfurl card
-- `fonts/` - Font Awesome and Glyphicons
 - `tools/` - Standalone dev-time Python scripts. The deployed site never runs them.
 
 ## Key Features & Architecture
 
 ### js/main.js
 
-Loaded by `index.html` only; `resume.html` and `privacy.html` are standalone. It
-drives the sticky navbar, on-page smooth scrolling, active-link tracking, mobile
-nav collapse, the scroll-to-top button, and the skill bars.
+Loaded by `index.html` only; `resume.html` and `privacy.html` are standalone. Vanilla
+JavaScript, no library, since issue #31. It drives the loader fade, the sticky navbar,
+active-link tracking, the mobile menu toggle, the scroll-to-top button's visibility, and the
+skill bars. It does not scroll the page: on-page scrolling is the browser's native fragment
+navigation (see Navigation & Scrolling).
 
 Everything in it has a matching element in `index.html`. That is the rule the file
 exists to keep: it once held 664 lines, roughly 500 of which targeted elements no
@@ -94,16 +106,30 @@ noticing (issue #16). Do not add a block here without an element that uses it, a
 run `python3 tools/verify_interactivity.py` after touching `js/main.js` or the
 markup it depends on.
 
-Two invariants that are easy to break by accident:
+Invariants that are easy to break by accident:
 
 - Skill bar widths come from `data-percent` on `.progress-bar-line`, never from an
   inline `style`. CSS starts the bars at 5% and JavaScript animates them to the
   target once the section scrolls into view. With JavaScript off the bars stay at
   5%; that is accepted, since the portfolio section already requires JavaScript.
-- `navHeight()` subtracts an open `.navbar-collapse`. Below the Bootstrap
-  breakpoint the expanded dropdown is in flow inside the fixed header, so measuring
-  it raw returns 278px against the 63px it collapses back to, and every nav link
-  then stops that far short of its target.
+- `navHeight()` subtracts the open menu while the toggle is shown. Below 768px the
+  expanded menu is in flow inside the fixed header, so measuring it raw returns 278px
+  against the 63px it collapses back to. It now feeds only the active-link probe; the
+  scroll landing comes from CSS (below), and it works because the menu's link click
+  handler closes the menu before the browser performs the fragment navigation.
+- The mobile toggle is a plain `<button type="button" aria-expanded aria-controls="bm-navbar">`,
+  and `aria-expanded` is the single source of truth: `#bm-navbar` shows from `.is-open`, and
+  `.is-collapsing` exists only during the 350ms height animation, skipped under reduced
+  motion. The hidden state is a base rule and only `@media (min-width: 768px)` overrides it.
+  It used to sit in a `max-width: 767px` query, which left fractional widths between the two
+  breakpoints (browser zoom) with the menu showing and a toggle that did nothing;
+  `verify_interactivity.check_collapse_covers_every_width` and `check_nav_breakpoints` hold
+  that. A second tap during the animation reverses it, where Bootstrap ignored it; that is
+  deliberate.
+- `html.smooth-scroll` is added a frame after `load`, not at first paint. With
+  `scroll-behavior: smooth` on bare `html`, a deep link's initial jump animates against a
+  layout that is still settling and lands short. `check_deep_link_is_not_animated` and
+  `check_smooth_scroll_starts_on_load` hold it.
 
 The hero has no parallax. `.home-1` uses `background-size: cover`, so shifting
 `backgroundPosition` slides the image down and exposes blank space under the
@@ -197,14 +223,24 @@ there then appears without a code change.
 Function names, not line numbers, because line numbers go stale.
 
 - `stickyNav()` adds `.nav-sticky` past 100px and reveals `.scroll-up` past 1000px
-- The `a.scroll` click handler animates to the target, honoring each link's
-  `data-speed` and skipping the animation under `prefers-reduced-motion`
-- `changeActiveNavLink()` highlights the link for the visible `.one-page-section`.
-  A section without that class never highlights, which is how `#portfolio` was
-  silently excluded before issue #16
-- All three run from one `scroll` handler throttled to one pass per frame with
-  `requestAnimationFrame`, and once on ready so a deep link or a reload partway
-  down the page starts in the right state
+- Nav links, the hero chevron, and `.scroll-up` (`href="#"`) are plain fragment links. No
+  JavaScript cancels their click or scrolls the page, so the browser updates `location.hash`
+  and Back returns to the previous section. `css/style.css` sets `scroll-behavior: smooth` on
+  `html.smooth-scroll` inside `@media (prefers-reduced-motion: no-preference)`, so a visitor
+  who asked for reduced motion gets a jump, and `.one-page-section { scroll-margin-top: 63px }`
+  lands each section below the collapsed sticky header, which measured 63px at both 375px and 1440px. Change
+  that value if the sticky header's height changes; the verifier only asserts it is positive.
+  The per-link `data-speed` durations of the old jQuery animation are gone.
+- The `scroll` class on the nav links and the hero chevron drives nothing in CSS or JavaScript.
+  `verify_interactivity.py` uses it to find the nav targets, so keep it.
+- `changeActiveNavLink()` highlights the link for the visible `.one-page-section`, probing at
+  `scrollY + navHeight() + 1` against each section's border box (`offsetHeight`). A section
+  without that class never highlights, which is how `#portfolio` was silently excluded before
+  issue #16. jQuery's `.height()` measured the content box, which left each section's bottom
+  padding as a band where the previous link stayed lit.
+- All three run from one passive `scroll` listener and a `resize` listener, throttled to one
+  pass per frame with `requestAnimationFrame`, and once on ready so a deep link or a reload
+  partway down the page starts in the right state
 
 ### Contact Form
 - Uses FormSubmit service (https://formsubmit.co/) - no backend required
@@ -219,17 +255,23 @@ Function names, not line numbers, because line numbers go stale.
 - FormSubmit's captcha is left on. It adds an interstitial before the redirect, not instead of it.
 - The `#form-message` div and the `.name-error` / `.email-error` / `.message-error` spans were
   deleted in issue #18. Nothing had written to them since #16. They were dead as content but not
-  weightless: each was `display: block` with `margin-top: 8px` plus `.mb-30`, inside floated grid
-  columns where those margins could not collapse away, and removing them alone collapsed the form
-  from 387px to 289px. `.input-field`'s `margin-bottom`, `textarea.input-field`'s `margin-bottom`,
-  and `.submit-btn`'s `clear` now carry that spacing, and `verify_content.py` asserts all three.
-  Do not move the pre-button gap onto `.submit-btn` as a `margin-top`: every field sits in a
-  floated column, so the button's static position is the top of the form and `clear: both` turns
-  any `margin-top` into clearance that absorbs it.
+  weightless: each was `display: block` with `margin-top: 8px` plus `.mb-30`, inside the floated
+  Bootstrap columns of the time, where those margins could not collapse away, and removing them
+  alone collapsed the form from 387px to 289px. `.input-field`'s `margin-bottom` and
+  `textarea.input-field`'s `margin-bottom` carry that spacing. Since issue #31 the form is a CSS
+  grid (`#contact-form { display: grid; column-gap: 30px }`, two columns from 768px, one
+  `.form-field` wrapper per field, the button spanning both columns as the last row), and each
+  grid item contains its field's margins exactly as the floated column did. The textarea's 68px
+  measures 76px on screen because the textarea is inline-level and the line box adds its
+  descent. `verify_content.py` asserts the two margins and the grid declaration. The form
+  measures 387.5px at 1440 and 461.75px at 375, unchanged by the move off floats.
 - Each field carries a `.sr-only` `<label for>` added in issue #19. The placeholders stay, but a
   placeholder is a hint rather than a name: it disappears the moment the field has content, which
   is exactly when someone tabbing back through a half-filled form needs to know what it holds.
-  `.sr-only` is Bootstrap 3's and takes the label out of flow, so the form still measures 387.5px.
+  `.sr-only` is the site's own rule in `css/style.css` (the standard clip pattern, the same
+  declarations Bootstrap 3 shipped) and takes the label out of flow, so the form still measures
+  387.5px. `verify_seo_a11y.check_no_bootstrap_classes` fails if that rule disappears, because an
+  unstyled `.sr-only` label renders visible and grows the form.
   `verify_seo_a11y.py` asserts every visible control is labelled and that the five FormSubmit
   field names are unchanged; the honeypot is exempt by shape, since labelling it would advertise
   it to the bots it exists to catch.
@@ -246,15 +288,21 @@ The invariants issue #19 established. `tools/verify_seo_a11y.py` holds all of th
 - **`css/style.css` must never suppress the focus outline unconditionally again.** It set
   `outline: none` on `a, a:focus, a:hover, a:active` plus `.input-field` and `.submit-btn`, which
   left every keyboard user navigating blind. `:focus-visible` now carries the ring.
-- **`a:focus:not(:focus-visible) { outline: none }` is load-bearing, not tidying.**
-  `bootstrap.min.css` carries `a:focus { outline: 5px auto -webkit-focus-ring-color }` at the same
-  (0,1,1) specificity, and `style.css` loads after it, so the deleted blanket suppression was the
-  only thing holding it back. Without this rule a mouse click on any anchor paints a ring that
-  stays until blur.
+- **No rule may paint a ring on plain `:focus`.** Until issue #31, `bootstrap.min.css` carried
+  `a:focus { outline: 5px auto -webkit-focus-ring-color }`, and an
+  `a:focus:not(:focus-visible) { outline: none }` rule in `style.css` held it back. With Bootstrap
+  gone that rule had nothing left to suppress, since the browser's own stylesheet keys its ring on
+  `:focus-visible`, so it was deleted. What it protected is now asserted directly:
+  `check_skip_link_and_focus_visibility` fails if any stylesheet a page links sets a visible
+  `outline` or `box-shadow` in a rule whose selector has `:focus` without `:focus-visible`
+  (`.skip-link:focus` is exempt). A mouse click paints no ring; Tab paints the 2px ring.
 - **A focus ring's color has to suit the surface under it.** White over the hero and the
   transparent nav; `#232323` everywhere else, including the footer at `#f1f1f1` and the nav once
-  `.nav-sticky` repaints it `#fff` past 100px of scroll.
-- **Every icon-only control has an `aria-label` and every decorative icon has `aria-hidden`.** The
+  `.nav-sticky` repaints it `#fff` past 100px of scroll. This covers the mobile nav toggle, which
+  has shown the keyboard ring since issue #31; Bootstrap's `.navbar-toggle:focus { outline: 0 }`
+  had hidden it.
+- **Every icon-only control has an `aria-label` and every `<svg>` icon has `aria-hidden="true"`
+  and `focusable="false"`.** The
   two Bluesky links get neither: their `<img alt="Bluesky">` already names them, and a label would
   win over the alt and leave it dead.
 - The contact items use `h3`/`h4`, not `h5`/`h6`. They sit under an `<h2>Contact</h2>`, so the old
@@ -414,7 +462,8 @@ the text of an `img` tag, and this file reported it as a real image with no `wid
 `img/og-card.jpg` is in `SHIPPED_VARIANTS` but deliberately not in `HOMEPAGE_ASSETS`: no page
 fetches it, only link unfurlers do, so it is not part of the first-paint budget.
 `projects.json` is the opposite case and joined `HOMEPAGE_ASSETS` in issue #20, because the
-renderer fetches it on every load. The homepage totals 660.5 KB against the 1024 KB budget.
+renderer fetches it on every load. The homepage totals 339.5 KB against the 1024 KB budget since issue #31 removed jQuery,
+Bootstrap, and Font Awesome; the verifier prints the current figure.
 
 ### Verifying the security criteria
 
@@ -422,14 +471,16 @@ renderer fetches it on every load. The homepage totals 660.5 KB against the 1024
 python3 tools/verify_security.py
 ```
 
-Exits 0 when the issue #17 acceptance criteria still hold: jQuery is at or above 3.5, the
-version in the file matches the one named in this document, no repo field is interpolated
-into a template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an
-`href`, `window.open`, or `setAttribute`, no page or stylesheet requests an `http://` asset, no
-IE conditional shim survives, and Font Awesome is one local major site-wide. Since issue #35 it
+Exits 0 when the issue #17 acceptance criteria still hold: no repo field is interpolated into a
+template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an `href`,
+`window.open`, or `setAttribute`, no page or stylesheet requests an `http://` asset, and no IE
+conditional shim survives. Issue #31 replaced its jQuery version floor and its Font Awesome
+check: every page now loads only first-party scripts and stylesheets plus Google Fonts, with no
+third-party `@import` or `url()` (see Technology Stack), and every icon is an inline SVG whose
+symbol resolves. Since issue #35 it
 also checks that `.github/workflows/verify.yml` still runs every verifier and still gates; see
 Continuous integration above. Standard library only. Run it after touching the portfolio
-renderer, any `<script>`/`<link>` tag, a bundled library, `.github/workflows/verify.yml`, or
+renderer, any `<script>`/`<link>` tag, a vendored file, `.github/workflows/verify.yml`, or
 the set of `tools/verify_*.py` files.
 
 **`remote_fields` must name fields the renderer actually reads, and the renderer's loop
@@ -455,7 +506,7 @@ there means the extraction pattern broke rather than that the script is gone; a 
 legitimately has none, `thanks.html` or the Termly privacy paste, prints a skip line instead.
 Any script tag without a `src` is gated, including `type="module"` and `defer`; only external
 `src` tags are skipped. The gated inline
-`<script>` in `index.html` runs 182 lines, all of it real JavaScript, and before this it had
+`<script>` in `index.html` runs 189 lines, all of it real JavaScript, and before this it had
 no syntax gate at all. It used to run 466 lines, of which about 301 were a CSS-as-a-string
 block injected via `insertAdjacentHTML`; issue #20 moved that CSS to `css/style.css`. Locally `node`
 is a convenience, skipped when absent, never a project dependency. CI is the exception: the
@@ -474,8 +525,8 @@ does.
 Do not mistake the interpolation checks for a general XSS gate. They catch a template literal
 written literally at an `innerHTML`/`outerHTML` assignment or an `insertAdjacentHTML` call, and
 that is all. Assigning the literal to a variable first, string concatenation, `innerHTML +=`,
-`document.write`, `createContextualFragment`, and jQuery's `.html()` and `.append()` all walk
-straight past it, and jQuery is loaded on `index.html`. The actual defense is that the renderer
+`document.write`, and `createContextualFragment` all walk straight past it, as would any DOM
+library's markup methods if one were ever loaded again. The actual defense is that the renderer
 builds DOM nodes and sets `textContent`; the checks only stop that defense from being quietly
 undone. They are also blunt in the other direction: any interpolation at those sites fails,
 including a safe `${escapeHtml(x)}`, so introducing an escaping helper means changing the rule
@@ -565,8 +616,10 @@ npx --yes lighthouse@12 http://127.0.0.1:8000/ --only-categories=accessibility,s
   --chrome-flags="--headless"
 ```
 
-`index.html` scores 100 for accessibility, SEO, and best practices, re-confirmed on
-2026-08-13 after issue #20 moved the card CSS and changed the markup, with no failing audits.
+`index.html` scores 100 for accessibility and SEO, re-confirmed on 2026-11-05 after issue #31
+replaced the libraries, the nav, the form layout, and the icons, with no failing audits; best
+practices was last confirmed at 100 on 2026-08-13, after issue #20. `resume.html` scored 100 for
+accessibility in both color schemes on the same 2026-11-05 run.
 Two notes if you run it on the other pages: `is-crawlable` fails on every page
 except `index.html`, which is correct rather than a defect, because those pages carry the
 `noindex` the owner asked for and Lighthouse's SEO category penalizes it; and `resume.html` needs
@@ -733,8 +786,7 @@ merge of a red PR, publishes without waiting for it. See Continuous integration.
 
 - **No Build System**: This is intentional - keep it simple with no npm/webpack/bundling. `tools/` holds standalone scripts, run by hand or, for the six verifiers, by the `verify` workflow; none of them is a build step. The `npx lighthouse` line in the SEO section is a measurement run by hand for the same reason, not a dependency.
 - **Six verifiers, all standard library, run by CI on every PR and push to `main`**: `verify_assets.py`, `verify_security.py`, `verify_content.py`, `verify_interactivity.py`, `verify_seo_a11y.py`, `verify_portfolio.py`. Each one pins the acceptance criteria of the issue that created it, so together they are the regression suite this repo has instead of tests. The `verify` workflow runs them and branch protection requires it to pass before a non-admin PR merges; see Continuous integration. Run all six locally before opening a PR as well.
-- **jQuery Dependency**: The entire site relies on jQuery. Modern JavaScript refactoring would require significant rewrite
-- **Bootstrap 3**: Using older Bootstrap version. Upgrading requires CSS/HTML updates
-- **Responsive Design**: Mobile-responsive via Bootstrap grid and custom media queries
+- **No runtime library**: no jQuery, Bootstrap, or Font Awesome since issue #31. `js/main.js` and the inline renderer are vanilla JavaScript, and `verify_security.py` fails a page that loads a script from anywhere but `js/` or a stylesheet from anywhere but `css/` or Google Fonts.
+- **Responsive Design**: CSS grid and flex rules in `css/style.css`, with breakpoints at 768px, 992px, and 1200px (the widths the Bootstrap 3 grid used, kept so the layout did not move)
 - **Browser Support**: Targets modern browsers with fallbacks for animations
 - **Dead CSS remains**: `css/style.css` still holds rules for the removed libraries (`#particles-js`, `.owl-*`, `.mfp-*`, `.home-carousel`, `.testimonial-slider`). Unmatched selectors are harmless. This was previously described here as "tracked separately in issue #18", which was wrong: issue #18 turned out to be the content and navigation issue and did not touch them. No open issue covers this cleanup, so file one before assuming someone else will.

@@ -53,9 +53,12 @@ LEFTOVER_TEMPLATE_FILES = [
 # Families that a bundled stylesheet defines rather than the page itself, as
 # lowercased family name -> the href substring that proves it is linked. A
 # page may name one of these without carrying its own @font-face.
-FONT_FAMILIES_FROM = {
-    "fontawesome": "css/font-awesome.min.css",
-}
+#
+# Empty since issue 31. Its one entry was FontAwesome, from a Font Awesome
+# stylesheet that no page links any more: the icons are inline SVG now. The
+# mechanism stays, because the next stylesheet that brings a family with it
+# needs exactly this and not a looser match.
+FONT_FAMILIES_FROM = {}
 
 failures = []
 
@@ -283,23 +286,29 @@ def check_contact_form_spacing_is_declared():
     30px to 0, and between the textarea and the button from 76px to 8px,
     measured in Chrome at 1280px against origin/main.
 
-    So the spacing now has to be declared. Three declarations carry it, and
-    this asserts each one exists rather than asserting a pixel value, which
-    keeps the check source-level: what it prevents is a future edit dropping
-    one and silently collapsing the form again.
+    So the spacing has to be declared, and this asserts each declaration
+    exists rather than a pixel value, which keeps the check source-level:
+    what it prevents is a future edit dropping one and silently collapsing
+    the form again.
 
-    A margin-top on .submit-btn would not work and is deliberately not what
-    is asserted. Every field sits in a floated grid column, so the button's
-    static position is the top of the form, and clear: both turns any
-    margin-top into clearance that absorbs it. The last float's bottom margin
-    is what the button actually clears past, which is why the pre-button gap
-    lives on textarea.input-field.
+    Issue 31 replaced the Bootstrap float columns with a CSS grid on the form
+    itself. The two gaps still live on the fields: .input-field's
+    margin-bottom spaces the name/email row from the textarea, and
+    textarea.input-field's spaces the textarea from the button. Each field
+    sits in a grid item, which contains its margins exactly as the floated
+    column did, so neither can collapse away. What used to put the button
+    below the fields was clear: both on .submit-btn, which has nothing to
+    clear now; the grid declaration on #contact-form is what places it, so
+    that is what is asserted in its place.
     """
     print("\nContact form spacing is declared, not emergent")
 
     css = read_or_fail(STYLE_CSS)
     if css is None:
         return
+    # A declaration inside a comment declares nothing: `/* display: grid */`
+    # in the #contact-form rule used to satisfy the grid assertion below.
+    css = without_comments(css, "css")
 
     margin_bottom = re.compile(r"(?<!-)margin-bottom\s*:")
     check(
@@ -311,8 +320,9 @@ def check_contact_form_spacing_is_declared():
         "textarea.input-field declares the margin-bottom that spaces the button",
     )
     check(
-        re.search(r"(?<!-)clear\s*:", declarations(css, ".submit-btn")) is not None,
-        ".submit-btn declares clear, so it lands below the floated columns",
+        re.search(r"(?<!-)display\s*:\s*grid\b", declarations(css, "#contact-form"))
+        is not None,
+        "#contact-form declares display: grid, which places the button below the fields",
     )
 
 
@@ -418,10 +428,10 @@ def check_resume_declares_no_unloaded_font():
     containing the family name, with the space spelled either as + or as
     %20, since that is as far as a source-level check can see without
     fetching and parsing the stylesheet. And a family defined inside an
-    already-linked external stylesheet, such as FontAwesome in
-    css/font-awesome.min.css, is recognized only through FONT_FAMILIES_FROM
-    below. Add an entry there rather than loosening the match when a page
-    starts declaring a family that some other stylesheet provides.
+    already-linked external stylesheet, rather than by the page or by a
+    font URL, is recognized only through FONT_FAMILIES_FROM above. Add an
+    entry there rather than loosening the match when a page starts declaring
+    a family that some other stylesheet provides.
     """
     print("\nresume.html declares no font it does not load")
 
