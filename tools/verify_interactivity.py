@@ -124,7 +124,10 @@ def check_script_tag(facts):
     tag coming back is 127 KB of end-of-life library that nothing calls.
     Every page is swept, not just index.html.
     """
-    if "js/main.js" not in facts.scripts:
+    # ./js/main.js and /js/main.js load the same file; the site serves from
+    # the root, so all three spellings count.
+    normalized = [re.sub(r"^(?:\./|/)", "", src) for src in facts.scripts]
+    if "js/main.js" not in normalized:
         fail(
             "index.html does not load js/main.js. The tag was dropped in "
             "eba0f7b and every interaction in that file died with it."
@@ -201,6 +204,49 @@ def media_blocks(css, condition):
     return spans
 
 
+def strip_js_comments(code):
+    """JavaScript with its /* */ and // comments removed, strings intact.
+
+    Quote-aware: a // or /* inside a string literal, such as "https://..."
+    or a path with a doubled slash, is part of the string and is kept. A
+    comment that quotes code, such as `// icon(name) returns an inline
+    <svg>`, is gone before any scan reads the code. Regular expression
+    literals are not recognized; the scripts here have none that hold a
+    quote or a //.
+    """
+    out = []
+    index, length = 0, len(code)
+    quote = None
+    while index < length:
+        char = code[index]
+        if quote:
+            out.append(char)
+            if char == "\\" and index + 1 < length:
+                out.append(code[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "\"'`":
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if code.startswith("/*", index):
+            end = code.find("*/", index + 2)
+            index = length if end == -1 else end + 2
+            continue
+        if code.startswith("//", index):
+            end = code.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def check_native_smooth_scroll(css, js):
     """Smooth scrolling is the browser's, and nothing in main.js fights it.
 
@@ -221,7 +267,16 @@ def check_native_smooth_scroll(css, js):
     that native fragment navigation gives for free.
     """
     css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    allowed = media_blocks(css_code, r"prefers-reduced-motion\s*:\s*no-preference")
+    # The query must be exactly the no-preference test (optionally limited to
+    # screen). A list like `(prefers-reduced-motion: no-preference), all`
+    # matches everyone, which is no condition at all.
+    allowed = [
+        span for span in media_blocks(css_code, r"prefers-reduced-motion\s*:\s*no-preference")
+        if re.fullmatch(
+            r"@media\s*(?:(?:only\s+)?screen\s+and\s*)?\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)\s*\{",
+            css_code[span[0]:css_code.index("{", span[0]) + 1],
+        )
+    ]
     smooth = [m.start() for m in re.finditer(r"scroll-behavior\s*:\s*smooth", css_code)]
     if not smooth:
         fail("css/style.css never sets scroll-behavior: smooth, so nav links jump.")
@@ -240,24 +295,28 @@ def check_native_smooth_scroll(css, js):
         if not re.fullmatch(r"html(\.[\w-]+)?", selector):
             fail("scroll-behavior: smooth is set on %r; it belongs on html alone." % selector)
 
+    # A positive length: scroll-margin-top: 0 declares the property and
+    # still lands every heading under the header.
     margin = [
         m for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css_code)
         if any(part.strip() == ".one-page-section" for part in m.group(1).split(","))
-        and re.search(r"scroll-margin-top\s*:", m.group(2))
+        and re.search(r"scroll-margin-top\s*:\s*(?:[1-9]\d*(?:\.\d+)?|0?\.\d*[1-9]\d*)(?:px|r?em)\b", m.group(2))
     ]
     if not margin:
         fail(
-            ".one-page-section declares no scroll-margin-top, so a nav link "
-            "lands the section heading under the fixed header."
+            ".one-page-section declares no positive scroll-margin-top, so a nav "
+            "link lands the section heading under the fixed header."
         )
 
-    js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    js_code = strip_js_comments(js)
     # Patterns, not literal strings: `scrollTop=0`, `scrollTop += 1`,
-    # `window.scroll(0, 0)`, and `scrollBy (0, 1)` are all scripted scrolls.
+    # `scrollTop++`, `window.scroll(0, 0)`, and `scrollBy (0, 1)` are all
+    # scripted scrolls.
     for pattern, label, reason in (
         (r"\bscroll(?:To|By)?\s*\(", "scroll(), scrollTo(), or scrollBy()", "scrolling is native now"),
         (r"\bscrollIntoView\s*\(", "scrollIntoView()", "scrolling is native now"),
-        (r"\bscroll(?:Top|Left)\s*(?:[-+*/]?=)(?!=)", "an assignment to scrollTop or scrollLeft",
+        (r"\bscroll(?:Top|Left)\s*(?:[-+*/]?=(?!=)|\+\+|--)|(?:\+\+|--)\s*[\w$.]*\bscroll(?:Top|Left)\b",
+         "an assignment to scrollTop or scrollLeft",
          "assigning a scroll offset is a scripted scroll; scrolling is native now"),
         (r"\bpreventDefault\b", "preventDefault",
          "cancelling a click stops the native fragment navigation and its hash update"),
@@ -340,39 +399,192 @@ def named_function_spans(js):
     return spans
 
 
+def function_spans(js):
+    """(name or None, start, end, text before) of every function body in js.
+
+    Named declarations, anonymous function expressions, and arrow functions
+    with a block body. The text before an anonymous one is what it is passed
+    to, so a load listener written inline can be recognized.
+    """
+    spans = []
+    pattern = re.compile(
+        r"\bfunction\s*([A-Za-z_$][\w$]*)?\s*\([^)]*\)\s*\{"
+        r"|(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{"
+    )
+    for match in pattern.finditer(js):
+        depth, index = 1, match.end()
+        while depth and index < len(js):
+            if js[index] == "{":
+                depth += 1
+            elif js[index] == "}":
+                depth -= 1
+            index += 1
+        spans.append((match.group(1), match.end(), index, js[max(0, match.start() - 80):match.start()]))
+    return spans
+
+
+# window.addEventListener("load", ...) or a bare addEventListener("load", ...)
+# at global scope; never document.addEventListener("load"), which never fires.
+LOAD_LISTENER = r"(?:(?<![\w$.])window\s*\.\s*|(?<![\w$.]))addEventListener\(\s*([\"'])load\1\s*,\s*"
+
+
 def check_smooth_scroll_starts_on_load(css, js):
     """The smooth-scroll class is added from the load path, not during init.
 
     check_deep_link_is_not_animated requires smooth scrolling to be keyed on
     a class main.js adds. Adding it while main.js initializes, which runs
     before the portfolio cards and the webfont arrive, would bring back the
-    deep-link bug that check exists for. So every place main.js adds that
-    class must sit inside a named function that main.js registers as a load
-    listener (addEventListener("load", name)).
+    deep-link bug that check exists for.
+
+    A function is on the load path when window's load listener is it (named,
+    with or without an options argument such as { once: true }, or written
+    inline), when a function on the load path names it (a named
+    requestAnimationFrame or setTimeout callback, or a direct call), or when
+    it is an anonymous function inside one. Every place main.js adds the
+    class must be inside a function on that path. A listener on document
+    does not count: load fires on window.
     """
     css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    js_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    js_code = strip_js_comments(js)
     classes = set(re.findall(r"html\.([\w-]+)\s*\{[^}]*scroll-behavior\s*:\s*smooth", css_code))
-    spans = named_function_spans(js_code)
+    spans = function_spans(js_code)
+
+    def enclosing(span):
+        outer = [o for o in spans if o is not span and o[1] <= span[1] and span[2] <= o[2]]
+        return min(outer, key=lambda o: o[2] - o[1]) if outer else None
+
+    memo = {}
+
+    def on_load_path(span, depth=0):
+        key = (span[1], span[2])
+        if key in memo or depth > 8:
+            return memo.get(key, False)
+        memo[key] = False
+        name, start, end, before = span
+        if name is None:
+            result = bool(re.search(LOAD_LISTENER + r"$", before)) or (
+                enclosing(span) is not None and on_load_path(enclosing(span), depth + 1)
+            )
+        else:
+            result = bool(re.search(LOAD_LISTENER + re.escape(name) + r"\s*[,)]", js_code))
+            if not result:
+                for other in spans:
+                    if other is span or (other[1] <= start and end <= other[2] and other[0] == name):
+                        continue
+                    if other[1] <= start < other[2]:
+                        continue  # a function enclosing this one does not call it by containing it
+                    body = js_code[other[1]:other[2]]
+                    if re.search(r"(?<![\w$.])%s\b" % re.escape(name), body) and on_load_path(other, depth + 1):
+                        result = True
+                        break
+        memo[key] = result
+        return result
+
     for name in sorted(classes):
         adds = list(re.finditer(
             r"document\.documentElement\.classList\.add\(\s*([\"'])%s\1\s*\)" % re.escape(name),
             js_code,
         ))
         for add in adds:
-            enclosing = [span for span in spans if span[1] <= add.start() < span[2]]
-            innermost = min(enclosing, key=lambda span: span[2] - span[1]) if enclosing else None
-            registered = innermost is not None and re.search(
-                r"addEventListener\(\s*([\"'])load\1\s*,\s*%s\s*\)" % re.escape(innermost[0]),
-                js_code,
-            )
-            if not registered:
+            around = [span for span in spans if span[1] <= add.start() < span[2]]
+            innermost = min(around, key=lambda span: span[2] - span[1]) if around else None
+            if innermost is None or not on_load_path(innermost):
                 fail(
-                    "js/main.js adds the %s class outside a function it registers "
-                    "for the load event (%s), so smooth scrolling can start before "
-                    "the page has settled and a deep link animates short of its "
-                    "section." % (name, "in %s()" % innermost[0] if innermost else "at top level")
+                    "js/main.js adds the %s class outside the window load path (%s), "
+                    "so smooth scrolling can start before the page has settled and "
+                    "a deep link animates short of its section."
+                    % (name, "in %s()" % (innermost[0] or "an anonymous function")
+                       if innermost else "at top level")
                 )
+
+
+NAV_DISPLAY_TOKENS = ("navbar-collapse", "bm-navbar", "navbar-toggle")
+
+
+def capped_media(prelude):
+    """True when a @media prelude puts an upper bound on the width.
+
+    max-width, range syntax with the width on the small side (width < 768px,
+    width <= 767px, 768px > width), and a negated min-width all cap it.
+    """
+    return bool(
+        re.search(r"max-width", prelude)
+        or re.search(r"\bwidth\s*<", prelude)
+        or re.search(r">=?\s*width\b", prelude)
+        or re.search(r"\bnot\b[^{]*min-width", prelude)
+    )
+
+
+def nav_tokens(selector):
+    """Which nav elements a selector's subject is, ignoring pseudo-elements.
+
+    Only the last compound decides what the rule styles: `.nav-sticky
+    .navbar-collapse` styles the menu, `.navbar-collapse a` styles links in
+    it, and `.navbar-collapse::after` styles a clearfix box, not the menu.
+    """
+    subject = re.split(r"\s*[>+~]\s*|\s+", selector.strip())[-1]
+    if re.search(r"::?(?:before|after|first-line|first-letter|marker|placeholder)\b", subject):
+        return []
+    return [token for token in NAV_DISPLAY_TOKENS if re.search(r"[.#]%s(?![\w-])" % token, subject)]
+
+
+def check_nav_breakpoints(css):
+    """The two nav states each own their width range, by any selector or syntax.
+
+    Review round 2 of issue 31. check_collapse_covers_every_width (frozen)
+    reads `max-width` and the class selectors. This one adds what it does not
+    see: a range-syntax cap such as (width < 768px) and the #bm-navbar id
+    decide nothing about display either; the base rules keep the toggle
+    visible and the menu hidden unless it is .is-open or animating; and the
+    min-width: 768px block both shows the menu and hides the toggle, without
+    which the desktop nav vanishes or a dead toggle shows beside it.
+    """
+    css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    shows_menu = hides_toggle = False
+    for media, selector, body in css_rules(css_code):
+        display = re.search(r"(?<![-\w])display\s*:\s*([^;]+)", body)
+        if not display:
+            continue
+        value = re.sub(r"!\s*important", "", display.group(1)).strip().lower()
+        for part in (part.strip() for part in selector.split(",")):
+            tokens = nav_tokens(part)
+            if not tokens:
+                continue
+            if any(capped_media(prelude) for prelude in media):
+                fail(
+                    "%r sets display inside %s, a width-capped query; the mobile "
+                    "nav state has to be the base rule." % (part, " ".join(media))
+                )
+            if not media:
+                if "navbar-toggle" in tokens and value == "none":
+                    fail("%r hides the menu toggle at every width." % part)
+                if (
+                    {"navbar-collapse", "bm-navbar"} & set(tokens)
+                    and value != "none"
+                    and not re.search(r"\.is-(?:open|collapsing)\b", part)
+                ):
+                    fail(
+                        "%r shows the mobile menu at every width; only .is-open "
+                        "may, below 768px." % part
+                    )
+            if media and all(
+                re.search(r"min-width\s*:\s*768px|width\s*>=\s*768px|768px\s*<=\s*width", prelude)
+                for prelude in media
+            ):
+                if {"navbar-collapse", "bm-navbar"} & set(tokens) and value in ("block", "flex"):
+                    shows_menu = True
+                if "navbar-toggle" in tokens and value == "none":
+                    hides_toggle = True
+    if not shows_menu:
+        fail(
+            "No min-width: 768px rule shows .navbar-collapse (display: block or "
+            "flex), so the desktop nav links are hidden."
+        )
+    if not hides_toggle:
+        fail(
+            "No min-width: 768px rule hides .navbar-toggle, so a toggle that "
+            "does nothing shows beside the inline links."
+        )
 
 
 def css_rules(css, media=()):
@@ -589,6 +801,7 @@ def main():
     check_deep_link_is_not_animated(css, js)
     check_collapse_covers_every_width(css)
     check_smooth_scroll_starts_on_load(css, js)
+    check_nav_breakpoints(css)
     check_nav_targets(facts)
     check_progress_bars(facts)
     check_card_handler(html, css)
