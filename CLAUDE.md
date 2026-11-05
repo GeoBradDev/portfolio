@@ -155,11 +155,12 @@ exactly this reason.
 python3 tools/build_projects.py
 ```
 
-Standard library only, run by hand like `optimize_images.py` and `make_og_card.py`. There
-is no CI and no scheduled job; the site owner chose that on 2026-08-13 over a GitHub
-Action, so **the data is only as fresh as the last run**. Re-run it after adding the
-topic to a repo, editing a description, or redeploying a demo that had gone dark. The
-`generated` timestamp in `projects.json` is there so a reader can see how stale it is.
+Standard library only, run by hand like `optimize_images.py` and `make_og_card.py`. No
+scheduled job runs the script; the site owner chose that on 2026-08-13 over a scheduled
+GitHub Action, so **the data is only as fresh as the last run**. Re-run the script after
+adding the topic to a repo, editing a description, or redeploying a demo that had gone
+dark. The `verify` workflow added in issue #35 checks `projects.json` but never
+regenerates it and never calls the API. The `generated` timestamp in `projects.json` is there so a reader can see how stale it is.
 
 - **Filters on the `portfolio` GitHub topic, not on the description.** The old filter
   looked for the word in the description, which put a control flag in copy that visitors
@@ -356,6 +357,39 @@ brotli and gzip. Do not benchmark performance against it: the same build scored 
 on Lighthouse mobile uncompressed and 95 with compression enabled. Measure against a
 compressing server if the number matters.
 
+### Continuous integration
+
+`.github/workflows/verify.yml` runs the six verifiers on every pull request and on every push
+to `main` (issue #35). It sets up Python and node, then runs each `python3 tools/verify_*.py`
+as its own step under `if: ${{ !cancelled() }}`, so one run reports all six and the job fails
+if any one does. It needs no secrets, holds only `contents: read`, checks out with
+`persist-credentials: false`, and makes no network call beyond checkout and toolchain setup;
+`--check-links` stays out of it for the reason given under "Verifying the portfolio data
+criteria".
+
+- **The check is named `verify`, after the job id, and that name must not change.** Branch
+  protection on `main` requires it, requires changes to arrive by pull request, and does not
+  enforce either rule on admins, so an admin can still push to `main` directly or merge a PR
+  whose `verify` failed. Renaming the job, giving it a `name:`, or adding a matrix changes the
+  reported name, and the required check then never reports. Branch protection lives in the
+  repo settings, not in a file here, so nothing in the tree would notice it being changed.
+- **Pages does not wait for the gate.** It still deploys with the `legacy` build from `main`, so
+  an admin push straight to `main` publishes whether or not `verify` passes. The gate protects
+  merges, not deploys.
+- **A new verifier must be added to the workflow in the same change.**
+  `verify_security.check_ci_workflow` compares the `tools/verify_*.py` files on disk with the
+  steps the `verify` job runs and fails on any difference. It also rejects the ordinary edits
+  that would let the job pass without gating: a verifier step that cannot fail, a skipped job or
+  setup step, a `paths`, `types`, `tags`, or `branches-ignore` style filter, a `branches:` list
+  without `main`, a write permission, a secret, an unlisted action, or a network command. It
+  guards against accidental drift, not against every possible extra step: one that tampers
+  with the verifiers before they run without naming them would get past it. It reads the file
+  with line regexes, so it expects plain block-style YAML with two-space indents and fails on
+  other styles rather than guessing at them. If it rejects a harmless edit, rewrite the edit in that
+  style rather than loosening the check.
+- Run the verifiers locally before pushing anyway. The workflow tells you after the push; the
+  local run tells you before it.
+
 ### Verifying the asset budget
 
 ```bash
@@ -392,9 +426,11 @@ Exits 0 when the issue #17 acceptance criteria still hold: jQuery is at or above
 version in the file matches the one named in this document, no repo field is interpolated
 into a template literal or an `href`, repo-supplied URLs pass `safeUrl()` before reaching an
 `href`, `window.open`, or `setAttribute`, no page or stylesheet requests an `http://` asset, no
-IE conditional shim survives, and Font Awesome is one local major site-wide. Standard library
-only. Run it after touching the portfolio renderer, any `<script>`/`<link>` tag, or a bundled
-library.
+IE conditional shim survives, and Font Awesome is one local major site-wide. Since issue #35 it
+also checks that `.github/workflows/verify.yml` still runs every verifier and still gates; see
+Continuous integration above. Standard library only. Run it after touching the portfolio
+renderer, any `<script>`/`<link>` tag, a bundled library, `.github/workflows/verify.yml`, or
+the set of `tools/verify_*.py` files.
 
 **`remote_fields` must name fields the renderer actually reads, and the renderer's loop
 variable must stay named `repo`.** Three of those checks are pinned to the literal text
@@ -421,8 +457,10 @@ Any script tag without a `src` is gated, including `type="module"` and `defer`; 
 `src` tags are skipped. The gated inline
 `<script>` in `index.html` runs 182 lines, all of it real JavaScript, and before this it had
 no syntax gate at all. It used to run 466 lines, of which about 301 were a CSS-as-a-string
-block injected via `insertAdjacentHTML`; issue #20 moved that CSS to `css/style.css`. `node`
-is a convenience, skipped when absent, never a project dependency.
+block injected via `insertAdjacentHTML`; issue #20 moved that CSS to `css/style.css`. Locally `node`
+is a convenience, skipped when absent, never a project dependency. CI is the exception: the
+`verify` workflow sets node up and `check_ci_workflow` fails without it, because a silent skip
+there would leave the gate checking less than it reports.
 
 A script tag whose `type` is `application/json` or `application/ld+json` holds data, not
 JavaScript, and goes to `json.loads` instead of to `node`. This is not a courtesy: `node --check`
@@ -682,16 +720,19 @@ no effect.
 ## Deployment
 
 The site is deployed via GitHub Pages:
-1. Push changes to the `main` branch
+1. Changes reach `main` by merging a pull request, which must pass `verify` unless an admin
+   merges it, or by an admin push
 2. GitHub Pages automatically deploys from the root directory
 3. Custom domain configured via `CNAME` file (www.geobrad.dev)
 
-No build or deployment scripts needed - changes go live automatically after push.
+No build or deployment scripts needed - changes go live automatically once they land on `main`.
+The `verify` workflow does not gate the deploy itself: an admin push to `main`, or an admin
+merge of a red PR, publishes without waiting for it. See Continuous integration.
 
 ## Important Notes
 
-- **No Build System**: This is intentional - keep it simple with no npm/webpack/bundling. `tools/` holds standalone scripts run by hand, not a build step. The `npx lighthouse` line in the SEO section is a measurement run by hand for the same reason, not a dependency.
-- **Six verifiers, all standard library, all run by hand**: `verify_assets.py`, `verify_security.py`, `verify_content.py`, `verify_interactivity.py`, `verify_seo_a11y.py`, `verify_portfolio.py`. Each one pins the acceptance criteria of the issue that created it, so together they are the regression suite this repo has instead of tests. Run all six before opening a PR.
+- **No Build System**: This is intentional - keep it simple with no npm/webpack/bundling. `tools/` holds standalone scripts, run by hand or, for the six verifiers, by the `verify` workflow; none of them is a build step. The `npx lighthouse` line in the SEO section is a measurement run by hand for the same reason, not a dependency.
+- **Six verifiers, all standard library, run by CI on every PR and push to `main`**: `verify_assets.py`, `verify_security.py`, `verify_content.py`, `verify_interactivity.py`, `verify_seo_a11y.py`, `verify_portfolio.py`. Each one pins the acceptance criteria of the issue that created it, so together they are the regression suite this repo has instead of tests. The `verify` workflow runs them and branch protection requires it to pass before a non-admin PR merges; see Continuous integration. Run all six locally before opening a PR as well.
 - **jQuery Dependency**: The entire site relies on jQuery. Modern JavaScript refactoring would require significant rewrite
 - **Bootstrap 3**: Using older Bootstrap version. Upgrading requires CSS/HTML updates
 - **Responsive Design**: Mobile-responsive via Bootstrap grid and custom media queries
