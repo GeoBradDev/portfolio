@@ -709,29 +709,32 @@ Navigation
     box-shadow: inset 0 1px 0 rgba(0, 0, 0, .1);
 }
 
-/* The mobile menu. Below 768px it is out of the layout, and so out of the
-   tab order, until js/main.js marks it .is-open. .is-collapsing exists only
-   for the 350ms height animation Bootstrap's collapse plugin used to run,
-   and main.js skips it when the visitor asked for reduced motion. From
-   768px up the links sit inline and the toggle is hidden, whatever state
-   the menu was left in. */
-@media (max-width: 767px) {
-    .navbar-collapse {
-        display: none;
-    }
+/* The mobile menu. It is out of the layout, and so out of the tab order,
+   until js/main.js marks it .is-open. .is-collapsing exists only for the
+   350ms height animation Bootstrap's collapse plugin used to run, and
+   main.js skips it when the visitor asked for reduced motion.
 
-    .navbar-collapse.is-open {
-        display: block;
-        overflow-y: auto;
-    }
+   These are the base rules, not a max-width: 767px block, and only the
+   min-width: 768px block below overrides them, where the links sit inline
+   and the toggle is hidden whatever state the menu was left in. Viewport
+   width is fractional under browser zoom, and a width between 767 and 768
+   matches neither query: with the hiding in a max-width block it showed the
+   menu and a toggle that did nothing. verify_interactivity.py checks this. */
+.navbar-collapse {
+    display: none;
+}
 
-    .navbar-collapse.is-collapsing {
-        position: relative;
-        overflow: hidden;
-        -webkit-transition: height .35s ease;
-        -o-transition: height .35s ease;
-        transition: height .35s ease;
-    }
+.navbar-collapse.is-open {
+    display: block;
+    overflow-y: auto;
+}
+
+.navbar-collapse.is-collapsing {
+    position: relative;
+    overflow: hidden;
+    -webkit-transition: height .35s ease;
+    -o-transition: height .35s ease;
+    transition: height .35s ease;
 }
 
 @media (min-width: 768px) {

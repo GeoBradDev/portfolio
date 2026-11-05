@@ -302,6 +302,12 @@ As built:
   jump to `/#contact` toward an end point fixed before the portfolio cards and Lato arrive,
   and the section ended 11px (375) and 37px (1440) from the top, under the header. The rule
   is `html.smooth-scroll` instead, and `main.js` adds the class a frame after `load`.
+- Defect found in review round 1, fixed under a frozen test
+  (`verify_interactivity.check_collapse_covers_every_width`, commit 106a7df): the collapse
+  CSS this task wrote put the hidden state in `@media (max-width: 767px)` and the inline
+  layout in `(min-width: 768px)`, so a fractional width between them (browser zoom) showed
+  the menu and a toggle that did nothing. The hidden, `.is-open`, and `.is-collapsing` rules
+  are now the base, overridden only from 768px up, as Bootstrap's `.collapse` was.
 
 ### Task 3: Replace bootstrap.min.css
 
