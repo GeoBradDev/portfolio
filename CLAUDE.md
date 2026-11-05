@@ -95,9 +95,10 @@ to one of them needs its symbol added with it. Rules the verifiers hold:
 
 Loaded by `index.html` only; `resume.html` and `privacy.html` are standalone. Vanilla
 JavaScript, no library, since issue #31. It drives the loader fade, the sticky navbar,
-active-link tracking, the mobile menu toggle, the scroll-to-top button's visibility, and the
-skill bars. It does not scroll the page: on-page scrolling is the browser's native fragment
-navigation (see Navigation & Scrolling).
+active-link tracking, the mobile menu toggle, the scroll-to-top button's visibility, the
+skill bars, and making the section an in-page link targets focusable for that click. It
+does not scroll the page or move focus into a section: both are the browser's native
+fragment navigation (see Navigation & Scrolling).
 
 Everything in it has a matching element in `index.html`. That is the rule the file
 exists to keep: it once held 664 lines, roughly 500 of which targeted elements no
@@ -231,6 +232,28 @@ Function names, not line numbers, because line numbers go stale.
   lands each section below the collapsed sticky header, which measured 63px at both 375px and 1440px. Change
   that value if the sticky header's height changes; the verifier only asserts it is positive.
   The per-link `data-speed` durations of the old jQuery animation are gone.
+- **An in-page link moves focus into its target, but only for the click that activates it**
+  (issue #33). A plain section is not focusable, so native fragment navigation scrolled to it
+  and left focus on `<body>`, and nothing told assistive technology the reading position
+  moved. The document click listener in `js/main.js` sets `tabindex="-1"` on the target for
+  that one click, without cancelling it, so the browser's own fragment focusing moves focus
+  there. It removes the attribute on blur, and a `window` `hashchange` listener blurs a section
+  that history traversal leaves focused, so Back then Tab behaves as on `main`.
+  `.one-page-section:focus { outline: none }` hides the ring on the focused section only: it is
+  a reading position, not a control, and every control keeps its `:focus-visible` ring.
+- **In `index.html`, never put a static `tabindex` on a section, or a `tabindex` of 0 or more on
+  anything.** A static one on the sections was the first fix tried for issue #33, and it
+  regressed mouse and touch users: a click or tap on plain content inside a section then
+  focuses the whole section, and the next Tab restarts at its first control instead of after
+  the clicked spot, scrolling the page backwards. A `tabindex` of 0 adds a non-control to the
+  tab order, and a positive one reorders it. Every fragment link in `index.html` that names an
+  id (all but back to top's bare `#`) must also target a `.one-page-section`, so the outline
+  rule covers whatever takes focus this way. `verify_interactivity.check_link_targets_take_focus`
+  holds these rules at the source level for every section a link targets, but its handler
+  checks only assert the pieces are present, so after touching the listener, drive the
+  behavior in a browser and compare it with `main`. One limit is accepted: after a link
+  focuses a section, a mouse click on non-control content inside that still-focused section
+  followed by Tab restarts from the section top.
 - The `scroll` class on the nav links and the hero chevron drives nothing in CSS or JavaScript.
   `verify_interactivity.py` uses it to find the nav targets, so keep it.
 - `changeActiveNavLink()` highlights the link for the visible `.one-page-section`, probing at
@@ -287,7 +310,9 @@ The invariants issue #19 established. `tools/verify_seo_a11y.py` holds all of th
   no mouse-click case to suppress.
 - **`css/style.css` must never suppress the focus outline unconditionally again.** It set
   `outline: none` on `a, a:focus, a:hover, a:active` plus `.input-field` and `.submit-btn`, which
-  left every keyboard user navigating blind. `:focus-visible` now carries the ring.
+  left every keyboard user navigating blind. `:focus-visible` now carries the ring. The one
+  exception is a focused `.one-page-section`, a reading position rather than a control; see
+  Navigation & Scrolling.
 - **No rule may paint a ring on plain `:focus`.** Until issue #31, `bootstrap.min.css` carried
   `a:focus { outline: 5px auto -webkit-focus-ring-color }`, and an
   `a:focus:not(:focus-visible) { outline: none }` rule in `style.css` held it back. With Bootstrap
