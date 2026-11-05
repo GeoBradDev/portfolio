@@ -21,7 +21,8 @@
   Focus moves the same way. Native fragment navigation focuses its target
   when the target is focusable, so the in-page link listener below only sets
   tabindex="-1" on the target for the click that activates the link, and
-  removes it again; it never moves focus or cancels the click itself.
+  removes it again, including when history traversal leaves the section
+  focused; it never moves focus or cancels the click itself.
 
 =========================================================================*/
 
@@ -251,6 +252,23 @@
                     drop();
                 }
             }, 0);
+        });
+
+        // History traversal runs no click. Back to an entry with no
+        // fragment runs no focusing step either, so focus would stay in the
+        // section the link moved it to and the next Tab would jump back
+        // down there. Blurring runs the cleanup above and leaves focus where
+        // it would have been without the listener. Only the click listener
+        // gives a section tabindex="-1", so that marks one it made
+        // focusable.
+        window.addEventListener("hashchange", function () {
+            var focused = document.activeElement;
+
+            if (focused && focused.classList.contains("one-page-section") &&
+                    focused.getAttribute("tabindex") === "-1" &&
+                    location.hash !== "#" + focused.id) {
+                focused.blur();
+            }
         });
 
 /*------------------------------------------------
