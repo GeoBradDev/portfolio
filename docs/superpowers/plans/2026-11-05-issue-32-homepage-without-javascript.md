@@ -155,9 +155,13 @@ Made checkable:
 
 - Deep links. The overlay used to hide the moment the portfolio renders above
   `#contact` and grows the page. Without it, a visitor on `/#contact` sees the jump
-  happen unless scroll anchoring holds the position. Chromium anchors by default; the
-  drive checks the final `#contact` offset after render at both widths, with
-  `projects.json` delayed so the render lands after the initial jump.
+  happen unless scroll anchoring holds the position. Revised after the live drive: it
+  does not hold, on either tree. With `projects.json` held 1500ms, `#contact` sits at the
+  63px header offset during the hold and ends at 2126px (375) and 1006px (1440) once the
+  7 cards render, with identical numbers on f8eda33 (`deep-base.log`, `deep-after.log`).
+  The final position is the same before and after this change; the only difference is
+  that the visitor now sees the hold state instead of the overlay. The anchoring defect
+  predates this issue and is reported as out of scope, not fixed here.
 - Breaking `onLoad()`. `check_smooth_scroll_starts_on_load` (issue 31/33) requires the
   `smooth-scroll` class to be added from the window load path. Removing `hideLoader()` must
   leave `onLoad()` registered on `load` and still adding the class in a
@@ -200,9 +204,11 @@ is out of scope.
   Each waits on `.loader-con` reaching `display: none`, which throws once the element is
   gone, so copy them into `scratchpad/issue32/` and change only that wait to accept an
   absent element (`!el || getComputedStyle(el).display === 'none'`); record the one-line
-  diff of each copy. Results must match f8eda33 apart from the loader itself. Add a deep
-  link drive: `/#contact` at 375 and 1440 with `projects.json` delayed 1500ms, `#contact`
-  top within 2px of the header offset after the cards render. Error state: route
+  diff of each copy (`drive.py` also needed its two loader-only assertions made
+  null-safe, three lines in all). Results must match f8eda33 apart from the loader
+  itself. Add a deep link drive: `/#contact` at 375 and 1440 with `projects.json` delayed
+  1500ms; the final `#contact` offset after the cards render must match f8eda33 (the
+  original "within 2px of the header offset" fails on both trees; see Risks). Error state: route
   `projects.json` to a 500 and confirm `.portfolio-error` renders.
 - Lighthouse: `npx --yes lighthouse@12 http://127.0.0.1:8000/ --only-categories=accessibility,seo --chrome-flags="--headless"`
   on the branch: accessibility 100, SEO 100.
