@@ -21,6 +21,17 @@ of the owner decision issue 18 recorded:
 
 Neither is exempt from any check here. Both are swept by the same *.html glob
 every other verifier uses.
+
+Issue 31 replaced Font Awesome with inline SVG and Bootstrap with local CSS,
+and the checks here followed. AccessibleNames fails a leftover Font Awesome
+<i> or <span> and any <svg> not aria-hidden="true" focusable="false", and
+check_renderer_icons_are_hidden holds the same rule over the SVGs the
+portfolio renderer creates. check_no_bootstrap_classes fails a Bootstrap grid,
+utility, component, or collapse class or data attribute anywhere, including
+renderer string literals, and requires a local rule for each Bootstrap-named
+class the site kept. The skip-link check no longer asserts the
+a:focus:not(:focus-visible) rule that only existed to beat Bootstrap; it
+asserts that nothing paints an outline or box-shadow on plain :focus.
 """
 
 import json
@@ -55,6 +66,11 @@ CONTRAST_PAIRS = [
     (".portfolio-link-code", "#ffffff"),
     (".portfolio-link-demo", None),  # declares its own background
     (".portfolio-error", None),      # declares its own background
+    # The renderer's empty state. It sits on #portfolio's gradient, which runs
+    # from #f8f9fa to #e9ecef; measured against the darker end, so the ratio
+    # holds anywhere on it. Not declared on the rule, because a solid
+    # background would paint a box over the gradient that was never there.
+    (".portfolio-empty", "#e9ecef"),
 ]
 CONTRAST_MINIMUM = 4.5
 
@@ -751,29 +767,45 @@ def check_renderer_icons_are_hidden():
         return
     script = "\n".join(inline_scripts(source))
 
-    created = re.search(
-        r"createElementNS\(\s*([\"'])http://www\.w3\.org/2000/svg\1\s*,\s*([\"'])svg\2\s*\)",
-        script,
+    site = re.compile(
+        r"createElementNS\(\s*([\"'])http://www\.w3\.org/2000/svg\1\s*,\s*([\"'])svg\2\s*\)"
     )
+    sites = list(site.finditer(script))
     if not check(
-        created is not None,
+        bool(sites),
         "the renderer creates its icons with createElementNS in the SVG namespace",
     ):
         return
 
-    # The statements after the <svg> is created, up to the helper's return.
-    end = script.find("return", created.end())
-    helper = script[created.end():end if end != -1 else len(script)]
-    for attribute, value in (("aria-hidden", "true"), ("focusable", "false")):
-        check(
-            re.search(
-                r"setAttribute\(\s*([\"'])%s\1\s*,\s*([\"'])%s\2\s*\)"
-                % (re.escape(attribute), value),
-                helper,
-            )
-            is not None,
-            'the renderer sets %s="%s" on every icon it creates' % (attribute, value),
+    # Every site, not the first, and the attributes bound to the variable the
+    # <svg> is assigned to: setting them on the <use> inside, or on any other
+    # element, hides nothing the screen reader sees as the graphic. The
+    # search runs from the site to the next function definition, which is
+    # the scope the helper works in.
+    for number, match in enumerate(sites, start=1):
+        assigned = re.search(
+            r"(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*document\.$",
+            script[:match.start()],
         )
+        if not check(
+            assigned is not None,
+            "renderer SVG %d is assigned to a variable, so its attributes can be checked" % number,
+        ):
+            continue
+        name = assigned.group(1)
+        following = re.search(r"\bfunction\b", script[match.end():])
+        scope = script[match.end():match.end() + following.start() if following else len(script)]
+        for attribute, value in (("aria-hidden", "true"), ("focusable", "false")):
+            check(
+                re.search(
+                    r"(?<![\w$.])%s\.setAttribute\(\s*([\"'])%s\1\s*,\s*([\"'])%s\2\s*\)"
+                    % (re.escape(name), re.escape(attribute), value),
+                    scope,
+                )
+                is not None,
+                'renderer SVG %d sets %s="%s" on the <svg> itself (%s)'
+                % (number, attribute, value, name),
+            )
 
 
 def check_new_tab_links_carry_rel():
@@ -968,12 +1000,22 @@ def check_skip_link_and_focus_visibility():
                         continue
                     if part.startswith(".skip-link"):
                         continue
-                    outline = re.search(r"(?<![-\w])outline(?:-style|-width)?\s*:\s*([^;}]+)", body)
-                    if outline and outline.group(1).strip() not in ("none", "0", "0px"):
-                        offenders.append("%s: %s" % (path.name, part))
+                    # !important does not change what is painted, so it is
+                    # stripped before comparing: `outline: none !important`
+                    # paints nothing. A box-shadow is a ring too, and a plain
+                    # :focus rule paints it on every mouse click.
+                    for prop in ("outline", "outline-style", "outline-width", "box-shadow"):
+                        declared = re.search(
+                            r"(?<![-\w])%s\s*:\s*([^;}]+)" % prop, body
+                        )
+                        if declared is None:
+                            continue
+                        value = re.sub(r"!\s*important", "", declared.group(1)).strip().lower()
+                        if value not in ("none", "0", "0px"):
+                            offenders.append("%s: %s { %s }" % (path.name, part, prop))
     check(
         not offenders,
-        "no stylesheet paints an outline on plain :focus, so a mouse click shows no ring%s"
+        "no stylesheet paints an outline or box-shadow on plain :focus, so a mouse click shows no ring%s"
         % (" (found %s)" % "; ".join(sorted(set(offenders))) if offenders else ""),
     )
 
@@ -982,8 +1024,22 @@ def check_skip_link_and_focus_visibility():
 # bootstrap.min.css and its JavaScript, so any of these left in the markup
 # styles nothing and does nothing.
 BOOTSTRAP_CLASS = re.compile(
-    r"col-(?:xs|sm|md|lg)-\d+|col-(?:xs|sm|md|lg)-offset-\d+|row|text-muted|navbar-right|collapse"
+    r"col-(?:xs|sm|md|lg)-\d+|col-(?:xs|sm|md|lg)-(?:offset|push|pull)-\d+|row|collapse"
+    r"|text-(?:muted|left|right|justify|primary|success|info|warning|danger)"
+    r"|navbar-(?:right|left|default|inverse|fixed-top|fixed-bottom|static-top|form|btn|text|link)"
+    r"|pull-(?:left|right)|center-block|clearfix|img-(?:responsive|rounded|circle|thumbnail)"
+    r"|btn|btn-[\w-]+|(?:hidden|visible)-[\w-]+|glyphicon|glyphicon-[\w-]+"
+    r"|well|well-[\w-]+|panel|panel-[\w-]+|label-[\w-]+|badge|caret|dropdown|dropdown-[\w-]+"
+    r"|list-(?:unstyled|inline)"
 )
+
+# Bootstrap class names a page already uses as its own, with the page that
+# styles it. thanks.html and 404.html each declare .panel in their own inline
+# <style> for their one content box; neither ever loaded Bootstrap. The
+# exemption holds only while that rule exists.
+SITE_OWNED_CLASSES = {
+    "panel": ("thanks.html", "404.html"),
+}
 
 # Class names Bootstrap used to style that index.html still uses as the
 # site's own. Each must now have a rule in css/style.css: an unstyled sr-only,
@@ -1029,7 +1085,14 @@ def check_no_bootstrap_classes():
         tokens = script_class_tokens(source)
         for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
             tokens.extend(value.split())
-        found = sorted(set(t for t in tokens if BOOTSTRAP_CLASS.fullmatch(t)))
+        owned = set()
+        styles = "\n".join(re.findall(r"<style\b[^>]*>(.*?)</style>", source, re.S | re.I))
+        for token, pages in SITE_OWNED_CLASSES.items():
+            if path.name in pages and re.search(
+                r"(?m)^\s*\.%s\s*\{" % re.escape(token), without_comments(styles, "css")
+            ):
+                owned.add(token)
+        found = sorted(set(t for t in tokens if BOOTSTRAP_CLASS.fullmatch(t)) - owned)
         check(
             not found,
             "%s uses no Bootstrap grid, utility, or collapse class%s"
