@@ -15,18 +15,23 @@ Issue 35 added one check that is not about issue 17: check_ci_workflow asserts
 that .github/workflows/verify.yml still gates merges. Inside the job with id
 `verify`, which has no name: override, every tools/verify_*.py on disk runs
 once, as a bare `run: python3 tools/verify_x.py` line under
-`if: ${{ !cancelled() }}`; checkout, setup-python, and setup-node are the only
-actions, each pinned, and checkout does not persist credentials. Nowhere in
+`if: ${{ !cancelled() }}` or `if: ${{ always() }}`, with no shell: override;
+the job has no if:, needs:, strategy:, container:, services:, or defaults:,
+and neither does the file at top level (defaults:); checkout, setup-python,
+and setup-node are the only actions, each pinned and unconditional, and
+checkout does not persist credentials. Nowhere in
 the file is there a write permission, a secret or token, continue-on-error,
 --check-links, an install or fetch, or pull_request_target, and the triggers
-are an unfiltered pull_request plus a push to main. Branch protection requires
+are a pull_request with no paths, types, or branches-ignore filter (and a
+branches: list, if any, that includes main) plus a push to main. Branch protection requires
 the check named `verify`, so a renamed job, a dropped verifier, a seventh one
 nobody wired in, or a step that cannot fail would otherwise stop gating
 merges with nothing failing. It reads the file line by line with regexes,
 standard library only, so it expects ordinary block style: two-space indents,
 `on:`, `permissions:`, and `jobs:` as top-level keys, and block mappings under
-them. It fails closed on anything else, such as flow-style triggers or a
-quoted job id, rather than guessing.
+them. It fails closed on anything else, such as flow-style triggers, a
+quoted job id, or a zero-indented sequence (`steps:` with `- name:` at the
+same indent), rather than guessing.
 """
 
 import json
@@ -558,11 +563,25 @@ def check_ci_workflow():
         job = None
     if not check(job is not None, "jobs: has a job with id verify"):
         return
+    job_keys = _children(lines, job)
     check(
-        "name" not in _children(lines, job),
+        "name" not in job_keys,
         "the verify job has no name: override, so its check is named verify",
     )
+    # Job keys that can switch the gate off: if: or needs: can skip the job,
+    # and a skipped required check counts as passed; a matrix renames the
+    # check; container: and defaults: (here or at top level) change what runs
+    # the steps, and a shell that ignores its script makes every step pass.
+    off = sorted(set(job_keys) & {"if", "needs", "strategy", "container",
+                                  "services", "defaults"})
+    if _top_level(lines, "defaults") is not None:
+        off.append("top-level defaults")
+    check(not off, "nothing can skip the verify job or replace its shell%s" % (
+        " (has %s)" % ", ".join(off) if off else ""))
     steps = _steps(lines, job)
+    shells = [step.get("name", "?") for step in steps if "shell" in step]
+    check(not shells, "no step sets shell:%s" % (
+        " (%s does)" % ", ".join(shells) if shells else ""))
 
     # A verifier step counts only in the one shape that can fail the job: a
     # bare command on its own run: line. `echo ...`, `... || true`, a run: |
@@ -577,11 +596,11 @@ def check_ci_workflow():
             # A plain step is skipped once an earlier one fails, and if: false
             # skips it always; either way it reports nothing.
             condition = step.get("if")
+            good = condition in ("${{ !cancelled() }}", "${{ always() }}")
             check(
-                condition in ("${{ !cancelled() }}", "${{ always() }}"),
-                "%s runs under if: ${{ !cancelled() }}%s"
-                % (match.group(1), "" if condition in ("${{ !cancelled() }}", "${{ always() }}")
-                   else " (has %s)" % (condition or "no if:")),
+                good,
+                "%s runs under if: ${{ !cancelled() }} or ${{ always() }}%s"
+                % (match.group(1), "" if good else " (has %s)" % (condition or "no if:")),
             )
         elif mentions:
             fail("a step mentions a verifier without running it as a bare "
@@ -620,6 +639,11 @@ def check_ci_workflow():
     in_job = {s.get("uses", "").strip("'\"").split("@")[0]: s for s in steps}
     check("actions/setup-node" in in_job, "the verify job sets up node")
     check("actions/setup-python" in in_job, "the verify job sets up Python")
+    # A setup step under an if: can be skipped, and then node is silently
+    # absent again.
+    gated = sorted(name for name, step in in_job.items() if name and "if" in step)
+    check(not gated, "checkout and setup steps run unconditionally%s" % (
+        " (%s has an if:)" % ", ".join(gated) if gated else ""))
     checkout = in_job.get("actions/checkout")
     check(
         checkout is not None
@@ -657,10 +681,14 @@ def check_ci_workflow():
     trig = _top_level(lines, "on")
     events = _children(lines, trig) if trig is not None else {}
     if check("pull_request" in events, "the workflow runs on pull_request"):
-        filters = sorted(set(_children(lines, events["pull_request"]))
-                         & {"paths", "paths-ignore", "types"})
-        check(not filters, "pull_request has no paths or types filter%s" % (
+        keys = _children(lines, events["pull_request"])
+        filters = sorted(set(keys) & {"paths", "paths-ignore", "types", "branches-ignore"})
+        check(not filters, "pull_request has no paths, types, or branches-ignore filter%s" % (
             " (has %s)" % ", ".join(filters) if filters else ""))
+        check(
+            "branches" not in keys or "main" in _flow_or_block_items(lines, keys["branches"]),
+            "pull_request branches:, if present, includes main",
+        )
     if check("push" in events, "the workflow runs on push"):
         keys = _children(lines, events["push"])
         check(

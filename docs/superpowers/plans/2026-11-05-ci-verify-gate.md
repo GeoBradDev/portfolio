@@ -55,25 +55,29 @@ blocked, or deploy gated") are met by this diff together with that settings step
      (a seventh added, or one dropped), or one runs twice. A verifier counts only as a step
      whose `run:` is exactly `python3 tools/verify_x.py`; a step that mentions a verifier any
      other way (only in a `name:`, `echo ...`, `... || true`, a `run: |` block) fails;
-   - a verifier step's `if:` is anything but `${{ !cancelled() }}` or `${{ always() }}`, or
-     `continue-on-error` appears anywhere;
+   - a verifier step's `if:` is anything but `${{ !cancelled() }}` or `${{ always() }}`, any
+     step sets `shell:`, or `continue-on-error` appears anywhere;
+   - the `verify` job has `if:`, `needs:`, `strategy:`, `container:`, `services:`, or
+     `defaults:`, or the file has a top-level `defaults:` (each can skip the job, rename the
+     check, or swap in a shell that ignores its script);
    - a `uses:` is not `actions/checkout`, `actions/setup-python`, or `actions/setup-node`, or
      is not pinned to `@v<major>[.minor[.patch]]` or a 40-hex SHA;
    - `setup-node` or `setup-python` is missing from the `verify` job (the inline-script and
-     `js/main.js` `node --check` gates skip silently without node), or the job's checkout
-     step lacks `persist-credentials: false`;
+     `js/main.js` `node --check` gates skip silently without node), checkout or either setup
+     step carries an `if:`, or the job's checkout step lacks `persist-credentials: false`;
    - the indent-0 `permissions:` block lacks `contents: read`, or write is granted anywhere
      (block, flow `{ contents: write }`, `write-all`, job level);
    - the word `secrets`, `GITHUB_TOKEN`, or `github.token` appears;
    - `--check-links`, `pip install`, `pip3 install`, `npm`, `npx`, `curl`, or `wget` appears;
-   - `pull_request_target` appears; `pull_request` is missing or carries `paths`,
-     `paths-ignore`, or `types`; `push` is missing, lacks a `branches:` list with the item
+   - `pull_request_target` appears; `pull_request` is missing, carries `paths`,
+     `paths-ignore`, `types`, or `branches-ignore`, or has a `branches:` list without `main`; `push` is missing, lacks a `branches:` list with the item
      `main`, or carries `branches-ignore`, `tags`, `tags-ignore`, `paths`, or `paths-ignore`.
 
    Structural matching reads the file with all comments stripped. The forbidden-token scans
    read it with only whole-line comments removed, so a trailing comment quoting a forbidden
    token fails the check (the safe direction) and a quoted `' #'` cannot hide one. Block
-   style is expected; flow-style triggers or a quoted job id fail closed.
+   style is expected; flow-style triggers, a quoted job id, or a zero-indented sequence
+   (`steps:` with `- name:` at the same indent) fail closed.
 10. CLAUDE.md describes how the gate runs: the "Important Notes" bullet no longer says the
     verifiers are only run by hand, and a section explains the workflow, the stable `verify`
     check name, and the branch protection as configured (required check `verify`, PRs
@@ -129,7 +133,8 @@ blocked, or deploy gated") are met by this diff together with that settings step
 - Criteria 1 to 7, 9: `check_ci_workflow()` in `verify_security.py`, shown red without the
   workflow and under each mutation, green with it.
   A must-pass set (block-style `- main`, `[main, dev]`, `${{ always() }}`, a trailing
-  comment on a run line, whole-line comments quoting forbidden tokens) shows it is not
+  comment on a run line, `pull_request: branches: [main]`, whole-line comments quoting
+  forbidden tokens) shows it is not
   over-tight on the shapes it accepts.
 - Criterion 8: the local replay output (clean exit 0, broken `alt` exit non-zero), then the PR's
   own `verify` run going green on GitHub.
