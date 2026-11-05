@@ -18,6 +18,11 @@
   smooth-scroll class, a frame after load (see onLoad below), so a deep
   link's first jump is instant. Nothing here may cancel a nav link's click
   or scroll the page itself, or it fights that and loses the hash update.
+  Focus moves the same way. Native fragment navigation focuses its target
+  when the target is focusable, so the in-page link listener below only sets
+  tabindex="-1" on the target for the click that activates the link, and
+  removes it again, including when history traversal leaves the section
+  focused; it never moves focus or cancels the click itself.
 
 =========================================================================*/
 
@@ -204,6 +209,67 @@
                 }
             });
         }
+
+/*------------------------------------------------
+  Move focus with an in-page link
+--------------------------------------------------*/
+
+        // A section is not focusable, so native fragment navigation scrolls
+        // to it and leaves focus on <body>, and nothing tells assistive
+        // technology the reading position moved. Making the target
+        // focusable for this one click lets the browser's own focusing
+        // step move focus into it. A static tabindex on the sections would
+        // do the same, but then a mouse click or tap anywhere inside one
+        // focuses the section and the next Tab restarts at its first
+        // control (issue 33). Keyboard Enter on a link fires click too; a
+        // modified click opens a new tab and is left alone. A bare "#"
+        // names no element, so back to top is untouched.
+        document.addEventListener("click", function (event) {
+            if (event.defaultPrevented || event.button !== 0 ||
+                    event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            var link = event.target.closest ? event.target.closest('a[href^="#"]') : null,
+                target = link ? document.getElementById(link.getAttribute("href").slice(1)) : null;
+
+            if (!target || target.hasAttribute("tabindex")) {
+                return;
+            }
+
+            function drop() {
+                target.removeAttribute("tabindex");
+            }
+
+            target.setAttribute("tabindex", "-1");
+            target.addEventListener("blur", drop, { once: true });
+
+            // Focus never landed, for instance because the navigation did
+            // not happen: do not leave the section focusable.
+            window.setTimeout(function () {
+                if (document.activeElement !== target) {
+                    target.removeEventListener("blur", drop);
+                    drop();
+                }
+            }, 0);
+        });
+
+        // History traversal runs no click. Back to an entry with no
+        // fragment runs no focusing step either, so focus would stay in the
+        // section the link moved it to and the next Tab would jump back
+        // down there. Blurring runs the cleanup above and leaves focus where
+        // it would have been without the listener. Only the click listener
+        // gives a section tabindex="-1", so that marks one it made
+        // focusable.
+        window.addEventListener("hashchange", function () {
+            var focused = document.activeElement;
+
+            if (focused && focused.classList.contains("one-page-section") &&
+                    focused.getAttribute("tabindex") === "-1" &&
+                    location.hash !== "#" + focused.id) {
+                focused.blur();
+            }
+        });
 
 /*------------------------------------------------
   Sticky navigation and scroll-to-top visibility
