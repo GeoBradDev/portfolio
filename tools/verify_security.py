@@ -10,6 +10,16 @@ runs anywhere Python 3 does and adds no build step to the site.
 
 Source-level only. That the escaped card actually renders, and that a hostile
 homepage URL is actually refused at runtime, has to be driven in a browser.
+
+Issue 35 added one check that is not about issue 17: check_ci_workflow asserts
+that .github/workflows/verify.yml still runs every tools/verify_*.py on disk,
+once each, offline, with read-only permissions, no secrets, pinned actions,
+node available, and a job whose check name stays `verify`. Branch protection
+requires that name, so a renamed job, a dropped verifier, or a seventh one
+nobody wired in would otherwise stop gating merges without anything failing.
+It reads the file line by line with regexes, standard library only, so it
+expects the ordinary block style: two-space indents, `on:` and `jobs:` as
+top-level keys, and one `run: python3 tools/verify_x.py` per verifier.
 """
 
 import json
@@ -27,6 +37,8 @@ PRIVACY = ROOT / "privacy.html"
 STYLE_CSS = ROOT / "css" / "style.css"
 JQUERY = ROOT / "js" / "jquery.min.js"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
+TOOLS = ROOT / "tools"
 
 # Every page at the repo root, discovered once from the filesystem instead of
 # hardcoded per check. check_no_plain_http_assets and
@@ -412,6 +424,151 @@ def check_inline_script_syntax():
                 )
 
 
+def _strip_yaml_comments(text):
+    """Return text's lines with YAML comments removed.
+
+    A comment that explains a rule has to quote it, so scanning comments would
+    let `# never use --check-links` trip the check, or `# contents: read`
+    satisfy it. Whole-line comments are dropped and a trailing ` #` comment is
+    cut. A `#` inside a quoted string would be cut too; the workflow has none.
+    """
+    lines = []
+    for line in text.splitlines():
+        if re.match(r"\s*#", line):
+            continue
+        lines.append(re.sub(r"\s+#.*$", "", line).rstrip())
+    return lines
+
+
+def _indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def _nested(lines, start):
+    """Return the indices of the non-blank lines nested under lines[start]."""
+    body = []
+    for number in range(start + 1, len(lines)):
+        if not lines[number].strip():
+            continue
+        if _indent(lines[number]) <= _indent(lines[start]):
+            break
+        body.append(number)
+    return body
+
+
+def _block(lines, start):
+    """Return the non-blank lines nested under lines[start], by indentation."""
+    return [lines[n] for n in _nested(lines, start)]
+
+
+def _find(lines, pattern):
+    """Index of the first line matching pattern, or None."""
+    for number, line in enumerate(lines):
+        if re.match(pattern, line):
+            return number
+    return None
+
+
+def check_ci_workflow():
+    print("\nCI runs every verifier on every pull request")
+
+    text = read_or_fail(WORKFLOW)
+    if text is None:
+        return
+    lines = _strip_yaml_comments(text)
+    code = "\n".join(lines)
+
+    # Which verifiers the workflow runs, against which exist on disk. A
+    # seventh verifier added without a step here would never gate anything.
+    ran = re.findall(r"python3\s+tools/(verify_\w+\.py)", code)
+    on_disk = sorted(p.name for p in TOOLS.glob("verify_*.py"))
+    missing = sorted(set(on_disk) - set(ran))
+    extra = sorted(set(ran) - set(on_disk))
+    check(
+        not missing and not extra,
+        "the workflow runs exactly the %d verifiers in tools/%s%s"
+        % (
+            len(on_disk),
+            " (not run: %s)" % ", ".join(missing) if missing else "",
+            " (not on disk: %s)" % ", ".join(extra) if extra else "",
+        ),
+    )
+    twice = sorted(name for name in set(ran) if ran.count(name) > 1)
+    check(not twice, "no verifier runs twice%s" % (
+        " (%s does)" % ", ".join(twice) if twice else ""))
+    # --check-links needs the network; a flaky wifi failure in the gate
+    # teaches people to ignore it.
+    check("--check-links" not in code, "no step passes --check-links")
+
+    # Least privilege: a top-level permissions block granting contents: read,
+    # and nothing anywhere granting write.
+    top = _find(lines, r"permissions:\s*$")
+    check(
+        top is not None
+        and any(re.match(r"\s+contents:\s*read$", l) for l in _block(lines, top)),
+        "top-level permissions grant contents: read",
+    )
+    check(
+        not re.search(r":\s*['\"]?write['\"]?\s*$|write-all", code, re.M),
+        "no permission is granted write",
+    )
+    check(
+        "secrets." not in code and "GITHUB_TOKEN" not in code,
+        "the workflow references no secrets and no GITHUB_TOKEN",
+    )
+
+    # A tag can be moved, but a branch moves by design. Major tag at minimum.
+    uses = re.findall(r"uses:\s*['\"]?([^'\"\s]+)", code)
+    pinned = re.compile(r"[\w.-]+/[\w./-]+@(v\d+(\.\d+){0,2}|[0-9a-f]{40})$")
+    loose = [u for u in uses if not pinned.match(u)]
+    check(
+        uses and not loose,
+        "every uses: is pinned to a version tag or a full SHA%s"
+        % (" (not: %s)" % ", ".join(loose) if loose else ""),
+    )
+    # Without node, check_inline_script_syntax here and the js/main.js gate
+    # in verify_interactivity.py skip instead of failing.
+    names = [u.split("@")[0] for u in uses]
+    check("actions/setup-node" in names, "the job sets up node")
+    check("actions/setup-python" in names, "the job sets up Python")
+
+    # Branch protection requires the check by name. With no name: override,
+    # GitHub reports a job by its id, so the id is the check name.
+    jobs = _find(lines, r"jobs:\s*$")
+    job = None
+    if jobs is not None:
+        for number in range(jobs + 1, len(lines)):
+            if lines[number].strip() and _indent(lines[number]) == 0:
+                break
+            if re.match(r"  verify:\s*$", lines[number]):
+                job = number
+                break
+    if check(job is not None, "jobs: has a job with id verify"):
+        body = _block(lines, job)
+        child = _indent(body[0]) if body else 0
+        check(
+            not any(_indent(l) == child and re.match(r"\s*name:", l) for l in body),
+            "the verify job has no name: override, so its check is named verify",
+        )
+
+    # Triggers. `on` is quoted by some authors because YAML 1.1 reads a bare
+    # `on` as a boolean.
+    trig = _find(lines, r"['\"]?on['\"]?:")
+    span = [trig] + _nested(lines, trig) if trig is not None else []
+    check(
+        any(re.search(r"\bpull_request\b(?!_)", lines[n]) for n in span),
+        "the workflow runs on pull_request",
+    )
+    check(
+        any(
+            re.match(r"\s+push:\s*$", lines[n])
+            and re.search(r"\bmain\b", "\n".join(_block(lines, n)))
+            for n in span
+        ),
+        "the workflow runs on push to main",
+    )
+
+
 def main():
     check_jquery_version()
     check_no_unescaped_interpolation()
@@ -420,6 +577,7 @@ def main():
     check_no_ie_conditional_shims()
     check_font_awesome_is_single_local_version()
     check_inline_script_syntax()
+    check_ci_workflow()
 
     print()
     if failures:

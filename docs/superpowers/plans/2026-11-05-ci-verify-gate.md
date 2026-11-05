@@ -36,8 +36,9 @@ blocked, or deploy gated") are met by this diff together with that settings step
 3. The job sets up Python 3 and Node, then runs exactly the six commands
    `python3 tools/verify_{assets,security,content,interactivity,seo_a11y,portfolio}.py`, none
    with `--check-links`.
-4. All six run even when an earlier one fails (each step after the first verifier carries
-   `if: ${{ !cancelled() }}`), and the job fails if any one does.
+4. All six run even when an earlier one fails (every verifier step carries
+   `if: ${{ !cancelled() }}`, the first included for uniformity, where it is harmless), and
+   the job fails if any one does.
 5. No secrets: the file references no `secrets.` context and no `GITHUB_TOKEN`; checkout uses
    `persist-credentials: false`. Least privilege: top-level `permissions: contents: read` and
    nothing granted write.
@@ -52,7 +53,10 @@ blocked, or deploy gated") are met by this diff together with that settings step
    `permissions: contents: read` is absent or any `write` permission appears; a `secrets.`
    reference appears; a `uses:` is unpinned or pinned to a branch; `setup-node` is missing (the
    inline-script and `js/main.js` `node --check` gates skip silently without node); the job id
-   `verify` is missing; either trigger is missing.
+   `verify` is missing; either trigger is missing. As built it also fails on: `write-all`; a
+   `GITHUB_TOKEN` reference; `setup-python` missing; a job-level `name:` on `verify`, which
+   would change the reported check name; and a push trigger that does not name `main`. YAML
+   comments are stripped first, so a comment quoting a rule neither satisfies nor trips it.
 10. CLAUDE.md describes how the gate runs: the "Important Notes" bullet no longer says the
     verifiers are only run by hand, and a section explains the workflow, the stable `verify`
     check name, and the branch protection as configured (required check `verify`, PRs

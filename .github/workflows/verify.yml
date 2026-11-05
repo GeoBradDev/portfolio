@@ -1,0 +1,64 @@
+# The repo's regression suite: the six standard-library verifiers in tools/,
+# run on every pull request and on every push to main.
+#
+# Branch protection on main requires the check named `verify`, which GitHub
+# takes from the job id below. Do not rename the job or give it a name: key,
+# or the required check stops being reported and merges stop being gated.
+# tools/verify_security.py (check_ci_workflow) asserts this file's shape.
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # verify_security.py and verify_interactivity.py run node --check and
+      # skip silently when node is absent.
+      - name: Set up node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # Every verifier step runs even when an earlier one failed, so one run
+      # reports all six results. The job still fails if any one does.
+      - name: Verify assets
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_assets.py
+
+      - name: Verify security
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_security.py
+
+      - name: Verify content
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_content.py
+
+      - name: Verify interactivity
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_interactivity.py
+
+      - name: Verify SEO and accessibility
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_seo_a11y.py
+
+      - name: Verify portfolio data
+        if: ${{ !cancelled() }}
+        run: python3 tools/verify_portfolio.py
