@@ -16,7 +16,6 @@
          noindex of its own, and Pages cannot send an X-Robots-Tag header. -->
     <meta name="robots" content="noindex, nofollow">
 
-    <link rel="stylesheet" href="css/font-awesome.min.css">
     <style>
         body {
             /* No webfont is loaded here on purpose. This page is printed to
@@ -136,6 +135,36 @@
             color: #2c3e50;
             margin-right: 7px;
         }
+
+        /* Sizes an inline SVG icon the way the Font Awesome 4.7 glyph it
+           replaced sat in the text: one em tall, as wide as the symbol's
+           viewBox makes it, and dropped below the baseline by the font's
+           256/1792 descent, which is where the glyph's own baseline was.
+           fill follows color, so .icon and the dark mode rule below still
+           color it, and the Download PDF icon stays the button's white. */
+        .glyph {
+            display: inline-block;
+            height: 1em;
+            vertical-align: -0.142857em;
+            fill: currentColor;
+            overflow: visible;
+        }
+
+        /* An inline <svg> with no width attribute is 300px wide; the viewBox
+           does not size it. Each width is the glyph's advance over the
+           font's 1792-unit em, rounded to a whole pixel the way the browser
+           laid the glyph out; a browser without round() keeps the em. */
+        .icon-briefcase { width: 1em; width: round(1em, 1px); }
+        .icon-certificate { width: 0.857143em; width: round(0.857143em, 1px); }
+        .icon-code { width: 1.071429em; width: round(1.071429em, 1px); }
+        .icon-envelope { width: 1em; width: round(1em, 1px); }
+        .icon-file-pdf-o { width: 0.857143em; width: round(0.857143em, 1px); }
+        .icon-github { width: 0.857143em; width: round(0.857143em, 1px); }
+        .icon-graduation-cap { width: 1.285714em; width: round(1.285714em, 1px); }
+        .icon-linkedin { width: 0.857143em; width: round(0.857143em, 1px); }
+        .icon-map-marker { width: 0.571429em; width: round(0.571429em, 1px); }
+        .icon-phone { width: 0.785714em; width: round(0.785714em, 1px); }
+        .icon-user { width: 0.714286em; width: round(0.714286em, 1px); }
 
         .icon {
             margin-right: 8px;
@@ -360,6 +389,25 @@
 </head>
 <body>
 
+<!-- Icon sprite. The outlines are Font Awesome 4.7.0 by Dave Gandy, font
+     under the SIL OFL 1.1, extracted from fonts/fontawesome-webfont.svg at
+     commit 0c26ed0. Inline in this page rather than shared with index.html,
+     because a <use> reaches only symbols in its own document and this page
+     is printed to PDF with no request it does not need. -->
+<svg aria-hidden="true" focusable="false" style="display:none">
+    <symbol id="icon-envelope" viewBox="0 0 1792 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1792 826v-794q0 -66 -47 -113t-113 -47h-1472q-66 0 -113 47t-47 113v794q44 -49 101 -87q362 -246 497 -345q57 -42 92.5 -65.5t94.5 -48t110 -24.5h1h1q51 0 110 24.5t94.5 48t92.5 65.5q170 123 498 345q57 39 100 87zM1792 1120q0 -79 -49 -151t-122 -123 q-376 -261 -468 -325q-10 -7 -42.5 -30.5t-54 -38t-52 -32.5t-57.5 -27t-50 -9h-1h-1q-23 0 -50 9t-57.5 27t-52 32.5t-54 38t-42.5 30.5q-91 64 -262 182.5t-205 142.5q-62 42 -117 115.5t-55 136.5q0 78 41.5 130t118.5 52h1472q65 0 112.5 -47t47.5 -113z"/></symbol>
+    <symbol id="icon-phone" viewBox="0 0 1408 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1408 296q0 -27 -10 -70.5t-21 -68.5q-21 -50 -122 -106q-94 -51 -186 -51q-27 0 -53 3.5t-57.5 12.5t-47 14.5t-55.5 20.5t-49 18q-98 35 -175 83q-127 79 -264 216t-216 264q-48 77 -83 175q-3 9 -18 49t-20.5 55.5t-14.5 47t-12.5 57.5t-3.5 53q0 92 51 186 q56 101 106 122q25 11 68.5 21t70.5 10q14 0 21 -3q18 -6 53 -76q11 -19 30 -54t35 -63.5t31 -53.5q3 -4 17.5 -25t21.5 -35.5t7 -28.5q0 -20 -28.5 -50t-62 -55t-62 -53t-28.5 -46q0 -9 5 -22.5t8.5 -20.5t14 -24t11.5 -19q76 -137 174 -235t235 -174q2 -1 19 -11.5t24 -14 t20.5 -8.5t22.5 -5q18 0 46 28.5t53 62t55 62t50 28.5q14 0 28.5 -7t35.5 -21.5t25 -17.5q25 -15 53.5 -31t63.5 -35t54 -30q70 -35 76 -53q3 -7 3 -21z"/></symbol>
+    <symbol id="icon-linkedin" viewBox="0 0 1536 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M349 911v-991h-330v991h330zM370 1217q1 -73 -50.5 -122t-135.5 -49h-2q-82 0 -132 49t-50 122q0 74 51.5 122.5t134.5 48.5t133 -48.5t51 -122.5zM1536 488v-568h-329v530q0 105 -40.5 164.5t-126.5 59.5q-63 0 -105.5 -34.5t-63.5 -85.5q-11 -30 -11 -81v-553h-329 q2 399 2 647t-1 296l-1 48h329v-144h-2q20 32 41 56t56.5 52t87 43.5t114.5 15.5q171 0 275 -113.5t104 -332.5z"/></symbol>
+    <symbol id="icon-github" viewBox="0 0 1536 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M768 1408q209 0 385.5 -103t279.5 -279.5t103 -385.5q0 -251 -146.5 -451.5t-378.5 -277.5q-27 -5 -40 7t-13 30q0 3 0.5 76.5t0.5 134.5q0 97 -52 142q57 6 102.5 18t94 39t81 66.5t53 105t20.5 150.5q0 119 -79 206q37 91 -8 204q-28 9 -81 -11t-92 -44l-38 -24 q-93 26 -192 26t-192 -26q-16 11 -42.5 27t-83.5 38.5t-85 13.5q-45 -113 -8 -204q-79 -87 -79 -206q0 -85 20.5 -150t52.5 -105t80.5 -67t94 -39t102.5 -18q-39 -36 -49 -103q-21 -10 -45 -15t-57 -5t-65.5 21.5t-55.5 62.5q-19 32 -48.5 52t-49.5 24l-20 3q-21 0 -29 -4.5 t-5 -11.5t9 -14t13 -12l7 -5q22 -10 43.5 -38t31.5 -51l10 -23q13 -38 44 -61.5t67 -30t69.5 -7t55.5 3.5l23 4q0 -38 0.5 -88.5t0.5 -54.5q0 -18 -13 -30t-40 -7q-232 77 -378.5 277.5t-146.5 451.5q0 209 103 385.5t279.5 279.5t385.5 103zM291 305q3 7 -7 12 q-10 3 -13 -2q-3 -7 7 -12q9 -6 13 2zM322 271q7 5 -2 16q-10 9 -16 3q-7 -5 2 -16q10 -10 16 -3zM352 226q9 7 0 19q-8 13 -17 6q-9 -5 0 -18t17 -7zM394 184q8 8 -4 19q-12 12 -20 3q-9 -8 4 -19q12 -12 20 -3zM451 159q3 11 -13 16q-15 4 -19 -7t13 -15q15 -6 19 6z M514 154q0 13 -17 11q-16 0 -16 -11q0 -13 17 -11q16 0 16 11zM572 164q-2 11 -18 9q-16 -3 -14 -15t18 -8t14 14z"/></symbol>
+    <symbol id="icon-map-marker" viewBox="0 0 1024 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M768 896q0 106 -75 181t-181 75t-181 -75t-75 -181t75 -181t181 -75t181 75t75 181zM1024 896q0 -109 -33 -179l-364 -774q-16 -33 -47.5 -52t-67.5 -19t-67.5 19t-46.5 52l-365 774q-33 70 -33 179q0 212 150 362t362 150t362 -150t150 -362z"/></symbol>
+    <symbol id="icon-user" viewBox="0 0 1280 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1280 137q0 -109 -62.5 -187t-150.5 -78h-854q-88 0 -150.5 78t-62.5 187q0 85 8.5 160.5t31.5 152t58.5 131t94 89t134.5 34.5q131 -128 313 -128t313 128q76 0 134.5 -34.5t94 -89t58.5 -131t31.5 -152t8.5 -160.5zM1024 1024q0 -159 -112.5 -271.5t-271.5 -112.5 t-271.5 112.5t-112.5 271.5t112.5 271.5t271.5 112.5t271.5 -112.5t112.5 -271.5z"/></symbol>
+    <symbol id="icon-code" viewBox="0 0 1920 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M617 137l-50 -50q-10 -10 -23 -10t-23 10l-466 466q-10 10 -10 23t10 23l466 466q10 10 23 10t23 -10l50 -50q10 -10 10 -23t-10 -23l-393 -393l393 -393q10 -10 10 -23t-10 -23zM1208 1204l-373 -1291q-4 -13 -15.5 -19.5t-23.5 -2.5l-62 17q-13 4 -19.5 15.5t-2.5 24.5 l373 1291q4 13 15.5 19.5t23.5 2.5l62 -17q13 -4 19.5 -15.5t2.5 -24.5zM1865 553l-466 -466q-10 -10 -23 -10t-23 10l-50 50q-10 10 -10 23t10 23l393 393l-393 393q-10 10 -10 23t10 23l50 50q10 10 23 10t23 -10l466 -466q10 -10 10 -23t-10 -23z"/></symbol>
+    <symbol id="icon-briefcase" viewBox="0 0 1792 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M640 1280h512v128h-512v-128zM1792 640v-480q0 -66 -47 -113t-113 -47h-1472q-66 0 -113 47t-47 113v480h672v-160q0 -26 19 -45t45 -19h320q26 0 45 19t19 45v160h672zM1024 640v-128h-256v128h256zM1792 1120v-384h-1792v384q0 66 47 113t113 47h352v160q0 40 28 68 t68 28h576q40 0 68 -28t28 -68v-160h352q66 0 113 -47t47 -113z"/></symbol>
+    <symbol id="icon-graduation-cap" viewBox="0 0 2304 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1774 700l18 -316q4 -69 -82 -128t-235 -93.5t-323 -34.5t-323 34.5t-235 93.5t-82 128l18 316l574 -181q22 -7 48 -7t48 7zM2304 1024q0 -23 -22 -31l-1120 -352q-4 -1 -10 -1t-10 1l-652 206q-43 -34 -71 -111.5t-34 -178.5q63 -36 63 -109q0 -69 -58 -107l58 -433 q2 -14 -8 -25q-9 -11 -24 -11h-192q-15 0 -24 11q-10 11 -8 25l58 433q-58 38 -58 107q0 73 65 111q11 207 98 330l-333 104q-22 8 -22 31t22 31l1120 352q4 1 10 1t10 -1l1120 -352q22 -8 22 -31z"/></symbol>
+    <symbol id="icon-certificate" viewBox="0 0 1536 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1376 640l138 -135q30 -28 20 -70q-12 -41 -52 -51l-188 -48l53 -186q12 -41 -19 -70q-29 -31 -70 -19l-186 53l-48 -188q-10 -40 -51 -52q-12 -2 -19 -2q-31 0 -51 22l-135 138l-135 -138q-28 -30 -70 -20q-41 11 -51 52l-48 188l-186 -53q-41 -12 -70 19q-31 29 -19 70 l53 186l-188 48q-40 10 -52 51q-10 42 20 70l138 135l-138 135q-30 28 -20 70q12 41 52 51l188 48l-53 186q-12 41 19 70q29 31 70 19l186 -53l48 188q10 41 51 51q41 12 70 -19l135 -139l135 139q29 30 70 19q41 -10 51 -51l48 -188l186 53q41 12 70 -19q31 -29 19 -70 l-53 -186l188 -48q40 -10 52 -51q10 -42 -20 -70z"/></symbol>
+    <symbol id="icon-file-pdf-o" viewBox="0 0 1536 1792" preserveAspectRatio="xMinYMid meet"><path transform="matrix(1 0 0 -1 0 1536)" d="M1468 1156q28 -28 48 -76t20 -88v-1152q0 -40 -28 -68t-68 -28h-1344q-40 0 -68 28t-28 68v1600q0 40 28 68t68 28h896q40 0 88 -20t76 -48zM1024 1400v-376h376q-10 29 -22 41l-313 313q-12 12 -41 22zM1408 -128v1024h-416q-40 0 -68 28t-28 68v416h-768v-1536h1280z M894 465q33 -26 84 -56q59 7 117 7q147 0 177 -49q16 -22 2 -52q0 -1 -1 -2l-2 -2v-1q-6 -38 -71 -38q-48 0 -115 20t-130 53q-221 -24 -392 -83q-153 -262 -242 -262q-15 0 -28 7l-24 12q-1 1 -6 5q-10 10 -6 36q9 40 56 91.5t132 96.5q14 9 23 -6q2 -2 2 -4q52 85 107 197 q68 136 104 262q-24 82 -30.5 159.5t6.5 127.5q11 40 42 40h21h1q23 0 35 -15q18 -21 9 -68q-2 -6 -4 -8q1 -3 1 -8v-30q-2 -123 -14 -192q55 -164 146 -238zM318 54q52 24 137 158q-51 -40 -87.5 -84t-49.5 -74zM716 974q-15 -42 -2 -132q1 7 7 44q0 3 7 43q1 4 4 8 q-1 1 -1 2q-1 2 -1 3q-1 22 -13 36q0 -1 -1 -2v-2zM592 313q135 54 284 81q-2 1 -13 9.5t-16 13.5q-76 67 -127 176q-27 -86 -83 -197q-30 -56 -45 -83zM1238 329q-24 24 -140 24q76 -28 124 -28q14 0 18 1q0 1 -2 3z"/></symbol>
+</svg>
+
 <div class="container">
     <header style="position: relative;">
         <h1>Brad Stricherz</h1>
@@ -374,20 +422,20 @@
             </picture>
         </div>
         <p class="contact-info">
-            <i class="fa fa-envelope icon" aria-hidden="true"></i><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a> |
-            <i class="fa fa-phone icon" aria-hidden="true"></i> <a href="tel:+16052700565">605-270-0565 </a> |
-            <i class="fa fa-linkedin icon" aria-hidden="true"></i><a
+            <svg class="glyph icon icon-envelope" aria-hidden="true" focusable="false"><use href="#icon-envelope"></use></svg><a href="mailto:Brad@GeoBrad.dev">Brad@GeoBrad.dev</a> |
+            <svg class="glyph icon icon-phone" aria-hidden="true" focusable="false"><use href="#icon-phone"></use></svg> <a href="tel:+16052700565">605-270-0565 </a> |
+            <svg class="glyph icon icon-linkedin" aria-hidden="true" focusable="false"><use href="#icon-linkedin"></use></svg><a
                 href="https://www.linkedin.com/in/brad-stricherz-944999349/">LinkedIn</a> |
-            <i class="fa fa-github icon" aria-hidden="true"></i><a href="https://github.com/GeoBradDev">GitHub</a>
+            <svg class="glyph icon icon-github" aria-hidden="true" focusable="false"><use href="#icon-github"></use></svg><a href="https://github.com/GeoBradDev">GitHub</a>
         </p>
         <p class="location-line">
-            <i class="fa fa-map-marker icon" aria-hidden="true"></i>St. Louis, MO | Active TS/SCI Clearance
+            <svg class="glyph icon icon-map-marker" aria-hidden="true" focusable="false"><use href="#icon-map-marker"></use></svg>St. Louis, MO | Active TS/SCI Clearance
         </p>
         <button id="theme-toggle" class="theme-toggle">🌙 Dark Mode</button>
     </header>
 
     <section class="section">
-        <h2><i class="fa fa-user icon" aria-hidden="true"></i>Professional Summary</h2>
+        <h2><svg class="glyph icon icon-user" aria-hidden="true" focusable="false"><use href="#icon-user"></use></svg>Professional Summary</h2>
         <p>Senior software engineer with 15+ years in geospatial intelligence and WebGIS development, pairing a
             GEOINT analyst's command of spatial data with full-stack engineering in React, TypeScript, Python, and
             PostGIS. At Gateway Geospatial Group (G3), builds a containerized geospatial data platform for a defense
@@ -398,7 +446,7 @@
             clearance.</p>
     </section>
     <section class="section">
-        <h2><i class="fa fa-code icon" aria-hidden="true"></i>Technical Skills</h2>
+        <h2><svg class="glyph icon icon-code" aria-hidden="true" focusable="false"><use href="#icon-code"></use></svg>Technical Skills</h2>
         <ul class="skills-list">
             <li><strong>Geospatial:</strong> PostGIS, GeoDjango, OGC services, ArcGIS REST, STAC, GeoPandas, ArcPy, GEOINT, Imagery Analysis, Spatial Analysis</li>
             <li><strong>Mapping:</strong> OpenLayers, Leaflet, CesiumJS</li>
@@ -410,7 +458,7 @@
     </section>
 
     <section class="section">
-        <h2><i class="fa fa-briefcase icon" aria-hidden="true"></i>Professional Experience</h2>
+        <h2><svg class="glyph icon icon-briefcase" aria-hidden="true" focusable="false"><use href="#icon-briefcase"></use></svg>Professional Experience</h2>
 
         <div class="job-title">Senior Software Engineer, Gateway Geospatial Group (G3)<span>Apr 2026 - Present</span>
         </div>
@@ -462,7 +510,7 @@
     </section>
 
     <section class="section">
-        <h2><i class="fa fa-graduation-cap icon" aria-hidden="true"></i>Education</h2>
+        <h2><svg class="glyph icon icon-graduation-cap" aria-hidden="true" focusable="false"><use href="#icon-graduation-cap"></use></svg>Education</h2>
         <ul>
             <li><strong>Master of Science in Spatial Data Science</strong>, Penn State University, 2023</li>
             <li><strong>Master of Arts in International Relations</strong>, Webster University, 2019</li>
@@ -471,7 +519,7 @@
     </section>
 
     <section class="section">
-        <h2><i class="fa fa-certificate icon" aria-hidden="true"></i>Certifications</h2>
+        <h2><svg class="glyph icon icon-certificate" aria-hidden="true" focusable="false"><use href="#icon-certificate"></use></svg>Certifications</h2>
         <ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
             <li>Cesium Certified Developer</li>
             <li>DoD Certified Python Instructor</li>
@@ -482,8 +530,7 @@
     </section>
 
     <a href="Brad%20Stricherz%20_%20Geospatial%20Software%20Engineer.pdf" class="download-btn"
-       download="Brad Stricherz _ Geospatial Software Engineer.pdf"><i
-            class="fa fa-file-pdf-o" aria-hidden="true"></i>
+       download="Brad Stricherz _ Geospatial Software Engineer.pdf"><svg class="glyph icon-file-pdf-o" aria-hidden="true" focusable="false"><use href="#icon-file-pdf-o"></use></svg>
         Download PDF</a>
 </div>
 <script>

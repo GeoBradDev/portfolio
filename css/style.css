@@ -187,6 +187,49 @@ img {
     height: auto;
 }
 
+/* Inline SVG icons, drawn by <use> from the sprite at the top of index.html.
+   They replace Font Awesome 4.7, and these declarations put each one where
+   its glyph sat: one em tall, as wide as the symbol's viewBox makes it, and
+   dropped below the baseline by the font's 256/1792 descent, which is where
+   the glyph's own baseline was. fill follows color, so every rule that colored
+   a glyph through color still colors the icon. The 1px right margin stands in
+   for the body's 1px letter-spacing, which the font added after the glyph
+   and which does not apply to a replaced element. */
+.icon {
+    display: inline-block;
+    height: 1em;
+    margin-right: 1px;
+    vertical-align: -0.142857em;
+    fill: currentColor;
+    overflow: visible;
+}
+
+/* An inline <svg> with no width attribute is 300px wide however tall it is;
+   the viewBox's aspect ratio does not size it. So each icon names its width,
+   which is its glyph's advance over the font's 1792-unit em, the same width
+   the glyph took up as text. The round() repeats it the way the browser laid
+   the glyph out, at a whole-pixel advance; without it the text after an icon
+   lands a fraction of a pixel off where it was. A browser without round()
+   keeps the plain em width. The symbols are aligned xMin to match: a glyph
+   draws from its origin and leaves the rounding slack on its right. */
+.icon-angle-up { width: 0.642857em; width: round(0.642857em, 1px); }
+.icon-code { width: 1.071429em; width: round(1.071429em, 1px); }
+.icon-cogs { width: 1.071429em; width: round(1.071429em, 1px); }
+.icon-database { width: 0.857143em; width: round(0.857143em, 1px); }
+.icon-envelope { width: 1em; width: round(1em, 1px); }
+.icon-external-link { width: 1em; width: round(1em, 1px); }
+.icon-facebook { width: 0.571429em; width: round(0.571429em, 1px); }
+.icon-github { width: 0.857143em; width: round(0.857143em, 1px); }
+.icon-globe { width: 0.857143em; width: round(0.857143em, 1px); }
+.icon-heart { width: 1em; width: round(1em, 1px); }
+.icon-instagram { width: 0.857143em; width: round(0.857143em, 1px); }
+.icon-line-chart { width: 1.142857em; width: round(1.142857em, 1px); }
+.icon-linkedin { width: 0.857143em; width: round(0.857143em, 1px); }
+.icon-map-marker { width: 0.571429em; width: round(0.571429em, 1px); }
+.icon-phone { width: 0.785714em; width: round(0.785714em, 1px); }
+.icon-star { width: 0.928571em; width: round(0.928571em, 1px); }
+.icon-youtube { width: 0.857143em; width: round(0.857143em, 1px); }
+
 .effect {
     -webkit-transition: all .4s ease-in-out;
     -moz-transition: all .4s ease-in-out;
@@ -699,8 +742,9 @@ About
     color: #232323;
 }
 
-.about-content ul li span i {
-    margin-right: 4px;
+/* 4px of space, plus the 1px the glyph's letter-spacing used to add. */
+.about-content ul li span .icon {
+    margin-right: 5px;
 }
 
 /* Spacing for the social icon list */
@@ -865,12 +909,18 @@ Services
     background: #dfdfdf;
 }
 
-.service-icon .fa {
+/* The glyph used to sit in a 70px line box of its own. An icon is a replaced
+   element and has no line-height, so the 13px of half-leading above and below
+   it, (70 - 44) / 2, is margin instead, and the baseline offset carries the
+   bottom half too. */
+.service-icon .icon {
     font-size: 44px;
-    line-height: 70px;
+    margin-top: 13px;
+    margin-bottom: 13px;
+    vertical-align: calc(-13px - 0.142857em);
 }
 
-.single-service:hover .service-icon .fa {
+.single-service:hover .service-icon .icon {
     -webkit-transform: rotateY(360deg);
     -moz-transform: rotateY(360deg);
     -ms-transform: rotateY(360deg);
@@ -1157,9 +1207,13 @@ Contact
     border-radius: 50%;
 }
 
-.contact-item .c-icon .fa {
+/* Same conversion as .service-icon .icon: (58 - 20) / 2 = 19px of
+   half-leading, as margin. */
+.contact-item .c-icon .icon {
     font-size: 20px;
-    line-height: 58px;
+    margin-top: 19px;
+    margin-bottom: 19px;
+    vertical-align: calc(-19px - 0.142857em);
     color: #fafafa;
 }
 
@@ -1277,6 +1331,15 @@ Footer
     align-items: center;
     justify-content: center;
     text-decoration: none;
+}
+
+/* An inline-flex box takes its baseline from its first item. A glyph's
+   baseline sat 0.142857em above its bottom; an <svg> has none, so the box
+   synthesizes one at the icon's bottom edge, which lifted each icon link
+   2.4px above where its glyph sat and above the Bluesky link beside it. This
+   puts the baseline back where the glyph's was. */
+.footer-social-list li a:has(> .icon) {
+    vertical-align: -0.142857em;
 }
 
 .footer-social-list li a img {

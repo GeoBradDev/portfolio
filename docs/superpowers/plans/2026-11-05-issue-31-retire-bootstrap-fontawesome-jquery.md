@@ -198,6 +198,24 @@ Then the site:
 Commit: `feat: replace Font Awesome 4.7 with inline SVG icons` (with the test changes in a
 preceding `test:` commit if the red run is committed separately).
 
+As built (departures measured against the task 0 baseline, not reasoned):
+- `width:auto` does not work: an inline `<svg>` with no width attribute is 300px wide
+  whatever its height. Every icon gets a `.icon-NAME { width: W/1792 em }` rule, followed by
+  `width: round(<same>, 1px)`, because the browser laid each glyph out at a whole-pixel
+  advance; without the rounding the text after an icon moved by a fraction of a pixel.
+  Symbols carry `preserveAspectRatio="xMinYMid meet"` so the rounding slack falls on the
+  right, where a glyph leaves it.
+- `.icon` has `margin-right: 1px`: the body's 1px letter-spacing was added after each glyph
+  and does not apply to a replaced element. The about list's 4px icon margin becomes 5px.
+- `.service-icon` and `.c-icon` set `line-height` 70px and 58px on the glyph. A replaced
+  element has no line-height, so the half-leading becomes margin, (70 - 44) / 2 = 13px and
+  (58 - 20) / 2 = 19px, carried into `vertical-align` too.
+- `.footer-social-list li a` is inline-flex and takes its baseline from its first item; an
+  `<svg>` has none, which lifted each icon link 2.4px. `a:has(> .icon)` gets
+  `vertical-align: -0.142857em` to put it back.
+- `resume.html` sizes its SVGs with a new `.glyph` class, not `.icon`: there `.icon` already
+  means "blue, 8px right margin", and the Download PDF glyph never had it.
+
 ### Task 2: Vanilla main.js and a hand-written toggle
 
 Red first, `verify_interactivity.py`:
