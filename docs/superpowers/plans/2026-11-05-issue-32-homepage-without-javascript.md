@@ -135,10 +135,9 @@ Made checkable:
      the viewport horizontally (`width`, `min-width`, `inline-size` or `min-inline-size` of
      100% or more, 100vw or more, or 100vmax or more; or zero left and right offsets) and
      vertically (`height`, `min-height`, `block-size` or `min-block-size` of 100% or more,
-     100vh or more, or 100vmax or more; or zero top and bottom offsets) fails. A `style`
-     attribute has its `/* */` comments stripped before it is read, and `css_rules()` skips
-     statement at-rules ending in `;` (`@import`, `@charset`, `@layer a, b;`) so the rule
-     after one is still read. Offsets are read from the longhands, the `inset` shorthand
+     100vh or more, or 100vmax or more; or zero top and bottom offsets) fails. Logical
+     sizes are read in horizontal writing mode. A `style` attribute has its `/* */`
+     comments stripped before it is read. Offsets are read from the longhands, the `inset` shorthand
      (one to four values), `inset-block` and `inset-inline` and their start and end
      longhands; any spelling of zero (`0`, `0px`, `.0`) counts. It passes only if the same
      block hides it: `display: none`, `visibility: hidden` or `collapse`, or `opacity: 0`
@@ -189,7 +188,11 @@ Made checkable:
   whose coverage comes from a combination of rules, and one sized or offset with `calc()`,
   `min()`, `max()`, `clamp()` or `var()` (values are read literally), and one written as a
   nested CSS rule inside another style rule (`.p { .o { position: fixed; inset: 0 } }`;
-  `css_rules()` does not descend into style rules) are not caught.
+  `css_rules()` does not descend into style rules), and one in the rule directly after a
+  statement at-rule (`@import ...;`, `@charset ...;`, `@layer a, b;`), which the shared
+  `css_rules()` reads as part of that rule's prelude and drops, are not caught. Logical
+  sizes are read in horizontal writing mode only; `writing-mode: vertical-*` is not
+  understood.
   Stylesheets other than `css/style.css` linked from a page are not read.
 - Font swap. Without the overlay the first paint may show the fallback font before Lato
   arrives. Accepted: content in a fallback font beats no content, which is the issue's
@@ -232,6 +235,20 @@ is out of scope.
   in a `<style>` block; logical sizes; a commented style attribute) and two guards on the
   collapse check (hidden base moved into a max-width query FAILs; `@import` placed right
   before the hidden base PASSes) all give the expected result.
+- Third edit, under the same approval: revert of the shared helper after a regression.
+  The round 2 split of each prelude on its last `;` also split a `;` inside
+  `url(data:...;base64,...)` or a quoted attribute selector, so three inputs that FAIL on
+  origin/main passed: a max-width `.navbar-toggle` display inside an `@supports` whose
+  condition holds a data URL (R1), the same with `[title="a;b"]` in the selector (R2),
+  both weakening `check_collapse_covers_every_width` and `check_nav_breakpoints`, and a
+  `.loader-con` rule inside such an `@supports` (R3). `css_rules()` is now byte-identical
+  to origin/main (`scratchpad/issue32/css_rules_diff.txt` is empty), and the rule after a
+  statement at-rule is a documented known limit instead. The logical size and commented
+  style attribute fixes stay. `scratchpad/issue32/red4.txt`: the verifier alone at
+  f8eda33 FAILs with the same 11 loader-only findings. `scratchpad/issue32/mutations4.txt`:
+  every earlier mutation gives its earlier result except N13 to N16, now expected PASS
+  as known limits, and the `@import` collapse guard, now expected FAIL for the same
+  reason; R1, R2 and R3 FAIL.
 - AC1: `probe32.py` against the branch with JavaScript disabled at 375x812 and 1440x900:
   every target's `topHit` is true; viewport and full-page screenshots
   `after-nojs-{375,1440}.png` and `after-nojs-{375,1440}-full.png` show hero, about,

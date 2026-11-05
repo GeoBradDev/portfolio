@@ -852,13 +852,6 @@ def css_rules(css, media=()):
 
     A small brace walker, enough for this stylesheet: it descends into any
     at-rule block and records the prelude of each @media it passes through.
-
-    A statement at-rule ends at a semicolon and has no block: `@import
-    url(x.css);`, `@charset "utf-8";`, `@layer a, b;`. Without the split
-    below it was read as the start of the next rule's prelude, which then
-    began with "@", so that rule's declarations were walked as nested CSS
-    and lost (found in review of issue 32). Only the text after the last
-    semicolon before a brace is the prelude.
     """
     rules = []
     index = 0
@@ -866,7 +859,7 @@ def css_rules(css, media=()):
         brace = css.find("{", index)
         if brace == -1:
             break
-        prelude = css[index:brace].rsplit(";", 1)[-1].strip()
+        prelude = css[index:brace].strip()
         depth, end = 1, brace + 1
         while depth and end < len(css):
             if css[end] == "{":
@@ -1102,7 +1095,9 @@ def covers_viewport(decls):
     inline-size or min-inline-size that is full (see is_full), or zero
     offsets on both the left and the right. Down: a height, min-height,
     block-size or min-block-size that is full, or zero offsets top and
-    bottom. Logical sizes are read in horizontal writing mode. Offsets come from the longhands, inset, inset-block and
+    bottom. Logical sizes are read in horizontal writing mode only: under
+    writing-mode: vertical-* inline-size is the height, and that is not
+    understood. Offsets come from the longhands, inset, inset-block and
     inset-inline (see offsets).
 
     A block that hides the element in the same breath is a closed modal or
@@ -1177,9 +1172,16 @@ def check_no_script_removed_overlay(css, js):
 
     Known limits: an overlay built entirely by script, one whose coverage is
     split across several rules, one sized with calc() or another CSS
-    function, and one written as a nested CSS rule inside another style
-    rule (`.p { .o { position: fixed; inset: 0 } }`, which css_rules does
-    not descend into) are not caught. Drive that in a browser.
+    function, one written as a nested CSS rule inside another style rule
+    (`.p { .o { position: fixed; inset: 0 } }`, which css_rules does not
+    descend into), and one in the rule directly after a statement at-rule
+    (`@import ...;`, `@charset ...;`, `@layer a, b;`) are not caught.
+    css_rules, shared with the nav checks, reads that statement as the start
+    of the next rule's prelude and drops the rule; splitting on the
+    semicolon was tried and reverted, because it also split a `;` inside
+    url(data:...;base64,...) or a quoted attribute selector and weakened
+    the nav checks. Logical sizes are read in horizontal writing mode only.
+    Drive that in a browser.
     """
     why = (
         "With JavaScript off nothing ever removes it, so the page stays "
