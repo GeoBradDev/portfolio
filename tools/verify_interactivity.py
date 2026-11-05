@@ -364,24 +364,71 @@ SCREEN_MEDIA = r"@media\s+(?:only\s+)?(?:screen|all)"
 FRAGMENT_LINK = r"""closest\(\s*(["'])a\[href\^=(?:"#"|'#')\]\1\s*\)"""
 
 
-def outline_state(body):
-    """'hidden', 'visible', or None: what a declaration block does to the outline.
+def outline_declarations(body):
+    """(state, important) per outline, outline-style, or outline-width declaration.
 
-    The last outline, outline-style, or outline-width declaration decides.
-    `outline: none; outline-style: solid` paints a ring, and so, for this
-    check, does `outline: none; outline-width: 2px`: either one undoes the
-    suppression the rule exists for.
+    state is 'hidden' or 'visible'. `outline: none; outline-style: solid`
+    paints a ring, and so, for this check, does `outline: none;
+    outline-width: 2px`: either one undoes the suppression the rule exists
+    for.
     """
-    state = None
+    declarations = []
     for prop, value in re.findall(r"(?<![-\w])(outline(?:-style|-width)?)\s*:\s*([^;]+)", body):
-        value = re.sub(r"!\s*important", "", value).strip().lower()
+        important = bool(re.search(r"!\s*important", value, re.I))
+        value = re.sub(r"!\s*important", "", value, flags=re.I).strip().lower()
         if prop == "outline":
             state = "hidden" if value in ("none", "0", "0px") else "visible"
         elif prop == "outline-style":
             state = "hidden" if value in ("none", "hidden") else "visible"
         else:
             state = "hidden" if re.fullmatch(r"0(?:\.0+)?(?:px|r?em)?", value) else "visible"
-    return state
+        declarations.append((state, important))
+    return declarations
+
+
+class OutlineCascade:
+    """The cascade, reduced to what one selector's outline needs.
+
+    An !important declaration outranks every normal one wherever it sits,
+    and within each group the last declaration wins. `{ outline: 2px solid
+    red !important }` followed by `{ outline: none }` paints the ring.
+    """
+
+    def __init__(self):
+        self.normal = None
+        self.important = None
+
+    def add(self, declarations):
+        for state, important in declarations:
+            if important:
+                self.important = state
+            else:
+                self.normal = state
+
+    def state(self):
+        return self.important if self.important is not None else self.normal
+
+
+def outline_state(body):
+    """'hidden', 'visible', or None: what one declaration block does to the outline."""
+    cascade = OutlineCascade()
+    cascade.add(outline_declarations(body))
+    return cascade.state()
+
+
+def html_integer(value):
+    """value parsed by HTML's rules for parsing integers, or None.
+
+    Leading ASCII whitespace is skipped, one optional sign is read, then the
+    digits; anything after them is ignored. So tabindex="1a" is 1 and
+    tabindex=" 0" is 0, exactly as a browser reads them, and a value with no
+    leading integer is ignored by the browser and returns None here.
+    """
+    match = re.match(r"[\t\n\f\r ]*([-+]?)(\d+)", value)
+    if match is None:
+        return None
+    number = int(match.group(2))
+    return -number if match.group(1) == "-" else number
 
 
 def check_link_targets_take_focus(facts, css, js):
@@ -412,7 +459,19 @@ def check_link_targets_take_focus(facts, css, js):
     screen (outside @media, or under @media screen or all) decides, and it
     must leave the outline hidden; a rule under any other query except print
     that paints an outline on it, or on .one-page-section:focus-visible,
-    fails, since it shows at some width.
+    fails, since it shows at some width. An !important declaration outranks
+    every normal one, as in the browser.
+
+    History traversal runs no click, and traversal to an entry with no
+    fragment runs no focusing step either, so Back from #contact to the
+    unhashed top of the page left focus in #contact and the next Tab jumped
+    back down to its first control. js/main.js therefore also listens for
+    hashchange or popstate and blurs (or strips the attribute from) a
+    section it made focusable that the new hash does not name.
+
+    The js/main.js assertions are presence checks, by this repo's
+    convention: they prove the handler's pieces are there, not what they do.
+    The browser drive proves the behavior.
     """
     for target in facts.fragment_targets:
         classes = facts.ids.get(target)
@@ -433,11 +492,8 @@ def check_link_targets_take_focus(facts, css, js):
             )
 
     for tag, element_id, value in facts.tabindexes:
-        try:
-            number = int(value.strip())
-        except ValueError:
-            continue
-        if number >= 0:
+        number = html_integer(value)
+        if number is not None and number >= 0:
             fail(
                 '<%s%s> carries tabindex="%s", which puts it into the tab order.'
                 % (tag, "#" + element_id if element_id else "", value)
@@ -469,15 +525,30 @@ def check_link_targets_take_focus(facts, css, js):
             "the mouse and touch Tab order regression."
         )
 
+    history = r"addEventListener\(\s*([\"'])(?:hashchange|popstate)\1\s*,\s*"
+    cleanups = [span for span in spans if span[0] is None and re.search(history + r"$", span[3])]
+    for name in re.findall(history + r"([A-Za-z_$][\w$]*)\s*[,)]", js_code):
+        cleanups.extend(span for span in spans if span[0] == name[1])
+    if not any(
+        re.search(r"""\.blur\(\s*\)|removeAttribute\(\s*(["'])tabindex\1\s*\)""", js_code[span[1]:span[2]])
+        for span in cleanups
+    ):
+        fail(
+            "js/main.js has no hashchange or popstate listener that blurs a "
+            "section it made focusable or removes its tabindex, so Back to an "
+            "entry with no fragment leaves focus in the old section and the "
+            "next Tab jumps back down to it."
+        )
+
     css_code = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    decided = None
+    decided = OutlineCascade()
     for media, selector, body in css_rules(css_code):
         parts = [part.strip() for part in selector.split(",")]
         on_screen = all(re.fullmatch(SCREEN_MEDIA, prelude) for prelude in media)
         printed = any(re.fullmatch(r"@media\s+(?:only\s+)?print", prelude) for prelude in media)
         state = outline_state(body)
         if ".one-page-section:focus" in parts and on_screen and state is not None:
-            decided = state
+            decided.add(outline_declarations(body))
         elif (
             not on_screen and not printed and state == "visible"
             and ({".one-page-section:focus", ".one-page-section:focus-visible"} & set(parts))
@@ -488,7 +559,7 @@ def check_link_targets_take_focus(facts, css, js):
             )
         if on_screen and ".one-page-section:focus-visible" in parts and state == "visible":
             fail("%r paints an outline on a focused section." % selector)
-    if decided != "hidden":
+    if decided.state() != "hidden":
         fail(
             "css/style.css does not leave the outline hidden on a focused "
             ".one-page-section (the last on-screen `.one-page-section:focus` rule "

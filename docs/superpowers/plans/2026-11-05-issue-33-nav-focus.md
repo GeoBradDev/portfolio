@@ -69,6 +69,23 @@ link fires `click`, so the keyboard path is covered; a modified click opens a ne
 window and is left alone. Proven by injection before the rewrite
 (`.../scratchpad/issue33/coord/inject.js`, `probe_dyn.py`).
 
+History traversal (added after the round 2 review). Removal on `blur` alone left a hole:
+load `/` with no hash, Enter on CONTACT, browser Back. Traversal to an entry with no fragment
+runs no focusing step, so focus stayed on `section#contact` (still carrying the attribute)
+at `scrollY` 0, and the next Tab went to its first control, `+1-605-270-0565`, jumping to
+3740 at 1440 and 6394 at 375 with the menu open. On `main` that Tab lands on the skip link at
+`scrollY` 0. Traversal to a hashed entry was already at parity: Chromium runs the focusing
+steps on the new fragment, which blurs the old section. So a `hashchange` listener blurs the
+focused element when it is a `.one-page-section` carrying `tabindex="-1"` (only the click
+listener puts one there) and the new hash does not name it; the blur runs the existing
+cleanup. Measured with `.../scratchpad/issue33/hist33.py` against `main` across Back to an
+unhashed entry, Back to a hashed one, and Forward after each, at 375 (menu open) and 1440,
+both motion settings: `blur()` matched `main` on every row for the active element, the next
+Tab's element, and its `scrollY`; so did removing the attribute instead. `blur()` was chosen
+because it reuses the blur path. `hashchange` and not `popstate`: the click listener only
+ever adds the attribute through a fragment navigation, so every traversal that could leave a
+stale focused section changes the hash.
+
 Why not focus on `hashchange` with `preventScroll`, as the issue sketched: `hashchange` does
 not fire when the visitor activates the link for the section the hash already names, so a
 second CONTACT after scrolling away would scroll but not move focus. The click listener sees
@@ -122,10 +139,16 @@ Added in Phase 1, from the issue's screen reader paragraph and the orchestrator'
    listener that selects `a[href^="#"]`, sets `tabindex="-1"`, and removes it again; and
    when the last on-screen `.one-page-section:focus` rule stops leaving the outline hidden
    (including `outline-style` or `outline-width` undoing it, or a visible outline under a
-   non-print `@media`).
+   non-print `@media`, or an `!important` ring outranking a later normal `outline: none`);
+   when any element's `tabindex` parses, by HTML's rules for parsing integers (so `"1a"` is
+   1 and `" 0"` is 0), to 0 or more; and when `js/main.js` has no `hashchange` or `popstate`
+   listener that blurs the section or removes its `tabindex`.
 10. After focus leaves a section a link moved it into, the section carries no `tabindex`;
     a modified (ctrl) click on a nav link adds none; and a mouse click on non-control
     content followed by Tab behaves exactly as on `main` (probe2.py, six rows).
+11. After history traversal (Back to an unhashed entry, Back to a hashed entry, and Forward
+    after each), `document.activeElement`, the next Tab's element, and its `scrollY` match
+    `main`, at 375 (menu open) and 1440, both motion settings, and no `tabindex` is left.
 9. Lighthouse accessibility and SEO stay 100 on `index.html`.
 
 ## Files that change
@@ -194,6 +217,9 @@ lives in the scratch directory, as the #31 drive did.
   tab order, so the skip link stays first.
 - The listener must not cancel the click or scroll. It calls neither; the existing
   banned-pattern check fails the gate if it ever does.
+- History traversal can leave a section focused that no fragment names (found in round 2
+  review). Covered by the `hashchange` blur and by `hist33.py`. The source check for it, like
+  the click handler check, asserts presence only; the drive proves behavior.
 - Lighthouse: `tabindex="-1"` on a non-interactive element raises no audit; only positive
   tabindex does (`tabindex` audit). Confirmed by running it.
 - Not chosen: `aria-labelledby` on each section to make it a named region landmark. It would
@@ -215,6 +241,7 @@ lives in the scratch directory, as the #31 drive did.
 | 8 | `verify_interactivity.py` red on `origin/main` and on f7bc742 (below), plus the ten hand mutations each failing |
 | 9 | Lighthouse output |
 | 10 | `drive33b.py` tabindex-removed and ctrl-click lines; `probe2.py` rows on the branch equal to `main` |
+| 11 | `hist33.py`: red on 8b471fa (8 FAILs, every unhashed-entry row), green after the fix; every row equal to `main` |
 
 ### Red runs of the rewritten check
 
