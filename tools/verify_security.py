@@ -10,6 +10,28 @@ runs anywhere Python 3 does and adds no build step to the site.
 
 Source-level only. That the escaped card actually renders, and that a hostile
 homepage URL is actually refused at runtime, has to be driven in a browser.
+
+Issue 35 added one check that is not about issue 17: check_ci_workflow asserts
+that .github/workflows/verify.yml still gates merges. Inside the job with id
+`verify`, which has no name: override, every tools/verify_*.py on disk runs
+once, as a bare `run: python3 tools/verify_x.py` line under
+`if: ${{ !cancelled() }}` or `if: ${{ always() }}`, with no shell: override;
+the job has no if:, needs:, strategy:, container:, services:, or defaults:,
+and neither does the file at top level (defaults:); checkout, setup-python,
+and setup-node are the only actions, each pinned and unconditional, and
+checkout does not persist credentials. Nowhere in
+the file is there a write permission, a secret or token, continue-on-error,
+--check-links, an install or fetch, or pull_request_target, and the triggers
+are a pull_request with no paths, types, or branches-ignore filter (and a
+branches: list, if any, that includes main) plus a push to main. Branch protection requires
+the check named `verify`, so a renamed job, a dropped verifier, a seventh one
+nobody wired in, or a step that cannot fail would otherwise stop gating
+merges with nothing failing. It reads the file line by line with regexes,
+standard library only, so it expects ordinary block style: two-space indents,
+`on:`, `permissions:`, and `jobs:` as top-level keys, and block mappings under
+them. It fails closed on anything else, such as flow-style triggers, a
+quoted job id, or a zero-indented sequence (`steps:` with `- name:` at the
+same indent), rather than guessing.
 """
 
 import json
@@ -27,6 +49,8 @@ PRIVACY = ROOT / "privacy.html"
 STYLE_CSS = ROOT / "css" / "style.css"
 JQUERY = ROOT / "js" / "jquery.min.js"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
+TOOLS = ROOT / "tools"
 
 # Every page at the repo root, discovered once from the filesystem instead of
 # hardcoded per check. check_no_plain_http_assets and
@@ -412,6 +436,271 @@ def check_inline_script_syntax():
                 )
 
 
+def _drop_comment_lines(text):
+    """Return text's lines with whole-line YAML comments removed.
+
+    The forbidden-token scans read this. A trailing comment is kept, because
+    cutting at ` #` is not quote-aware: `run: x ' #' --check-links` would lose
+    the flag. Keeping it means a trailing comment that quotes a forbidden
+    token fails the check, which is the safe direction.
+    """
+    return [line.rstrip() for line in text.splitlines()
+            if not re.match(r"\s*#", line)]
+
+
+def _strip_yaml_comments(text):
+    """Return text's lines with whole-line and trailing comments removed.
+
+    The structural matching reads this, so a comment beside a key cannot
+    change what the key appears to hold. A `#` inside a quoted string is cut
+    too; the anchored run-line match then fails closed on what is left.
+    """
+    return [re.sub(r"\s+#.*$", "", line) for line in _drop_comment_lines(text)]
+
+
+def _indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def _nested(lines, start):
+    """Return the indices of the non-blank lines nested under lines[start]."""
+    body = []
+    for number in range(start + 1, len(lines)):
+        if not lines[number].strip():
+            continue
+        if _indent(lines[number]) <= _indent(lines[start]):
+            break
+        body.append(number)
+    return body
+
+
+def _children(lines, start):
+    """Map each key directly under lines[start] to its line index."""
+    body = _nested(lines, start)
+    if not body:
+        return {}
+    depth = _indent(lines[body[0]])
+    keys = {}
+    for number in body:
+        match = re.match(r"\s*['\"]?([\w-]+)['\"]?\s*:", lines[number])
+        if match and _indent(lines[number]) == depth:
+            keys.setdefault(match.group(1), number)
+    return keys
+
+
+def _top_level(lines, key):
+    """Index of the indent-0 line for key (quoted or not), or None."""
+    for number, line in enumerate(lines):
+        if re.match(r"['\"]?%s['\"]?:" % re.escape(key), line):
+            return number
+    return None
+
+
+def _value(line):
+    """The text after the first colon on a key line."""
+    return line.split(":", 1)[1].strip()
+
+
+def _steps(lines, job):
+    """Split the job's steps: list into one dict per step.
+
+    Each dict maps a step key to its value text, plus "_lines" holding every
+    line of the step and "_with" holding the lines under its with: key.
+    """
+    steps_at = _children(lines, job).get("steps")
+    if steps_at is None:
+        return []
+    body = _nested(lines, steps_at)
+    if not body:
+        return []
+    dash = _indent(lines[body[0]])
+    steps = []
+    for number in body:
+        line = lines[number]
+        if _indent(line) == dash and line.lstrip().startswith("-"):
+            steps.append({"_lines": [], "_with": []})
+            line = line[:dash] + " " + line[dash + 1:]
+        if not steps:
+            continue
+        step = steps[-1]
+        step["_lines"].append(line)
+        match = re.match(r"(\s*)['\"]?([\w-]+)['\"]?\s*:\s*(.*)$", line)
+        if match and len(match.group(1)) == dash + 2:
+            step[match.group(2)] = match.group(3).strip()
+            step["_key"] = match.group(2)
+        elif step.get("_key") == "with":
+            step["_with"].append(line)
+    return steps
+
+
+def _flow_or_block_items(lines, number):
+    """Items of the list on lines[number]: `k: [a, b]` or `- a` lines below."""
+    value = _value(lines[number])
+    if value.startswith("["):
+        items = value.strip("[]").split(",")
+    else:
+        items = [re.sub(r"^\s*-\s*", "", lines[n]) for n in _nested(lines, number)]
+    return [item.strip().strip("'\"") for item in items if item.strip()]
+
+
+def check_ci_workflow():
+    print("\nCI runs every verifier on every pull request")
+
+    text = read_or_fail(WORKFLOW)
+    if text is None:
+        return
+    lines = _strip_yaml_comments(text)
+    # Forbidden tokens are searched for in text that still has its trailing
+    # comments; see _drop_comment_lines.
+    scan = "\n".join(_drop_comment_lines(text))
+
+    # The verify job, located once; every job-scoped rule reads its steps.
+    # Branch protection requires the check by name, and with no name:
+    # override GitHub reports a job by its id.
+    jobs = _top_level(lines, "jobs")
+    job = _children(lines, jobs).get("verify") if jobs is not None else None
+    if job is not None and _indent(lines[job]) != 2:
+        job = None
+    if not check(job is not None, "jobs: has a job with id verify"):
+        return
+    job_keys = _children(lines, job)
+    check(
+        "name" not in job_keys,
+        "the verify job has no name: override, so its check is named verify",
+    )
+    # Job keys that can switch the gate off: if: or needs: can skip the job,
+    # and a skipped required check counts as passed; a matrix renames the
+    # check; container: and defaults: (here or at top level) change what runs
+    # the steps, and a shell that ignores its script makes every step pass.
+    off = sorted(set(job_keys) & {"if", "needs", "strategy", "container",
+                                  "services", "defaults"})
+    if _top_level(lines, "defaults") is not None:
+        off.append("top-level defaults")
+    check(not off, "nothing can skip the verify job or replace its shell%s" % (
+        " (has %s)" % ", ".join(off) if off else ""))
+    steps = _steps(lines, job)
+    shells = [step.get("name", "?") for step in steps if "shell" in step]
+    check(not shells, "no step sets shell:%s" % (
+        " (%s does)" % ", ".join(shells) if shells else ""))
+
+    # A verifier step counts only in the one shape that can fail the job: a
+    # bare command on its own run: line. `echo ...`, `... || true`, a run: |
+    # block, or the command in a name: would all look present and gate
+    # nothing, so a step that mentions a verifier any other way fails.
+    ran = []
+    for step in steps:
+        mentions = any("tools/verify_" in line for line in step["_lines"])
+        match = re.fullmatch(r"python3 tools/(verify_\w+\.py)", step.get("run", ""))
+        if match:
+            ran.append(match.group(1))
+            # A plain step is skipped once an earlier one fails, and if: false
+            # skips it always; either way it reports nothing.
+            condition = step.get("if")
+            good = condition in ("${{ !cancelled() }}", "${{ always() }}")
+            check(
+                good,
+                "%s runs under if: ${{ !cancelled() }} or ${{ always() }}%s"
+                % (match.group(1), "" if good else " (has %s)" % (condition or "no if:")),
+            )
+        elif mentions:
+            fail("a step mentions a verifier without running it as a bare "
+                 "`run: python3 tools/verify_x.py` line: %s"
+                 % step.get("name", step.get("run", "?")))
+    on_disk = sorted(p.name for p in TOOLS.glob("verify_*.py"))
+    missing = sorted(set(on_disk) - set(ran))
+    extra = sorted(set(ran) - set(on_disk))
+    check(
+        not missing and not extra,
+        "the verify job runs exactly the %d verifiers in tools/%s%s"
+        % (
+            len(on_disk),
+            " (not run: %s)" % ", ".join(missing) if missing else "",
+            " (not on disk: %s)" % ", ".join(extra) if extra else "",
+        ),
+    )
+    twice = sorted(name for name in set(ran) if ran.count(name) > 1)
+    check(not twice, "no verifier runs twice%s" % (
+        " (%s does)" % ", ".join(twice) if twice else ""))
+    check("continue-on-error" not in scan, "nothing sets continue-on-error")
+
+    # Actions: three known ones, each pinned to a major tag at minimum or a
+    # full SHA. A tag can be moved, but a branch moves by design.
+    allowed = {"actions/checkout", "actions/setup-python", "actions/setup-node"}
+    uses = re.findall(r"uses:\s*['\"]?([^'\"\s]+)", scan)
+    pinned = re.compile(r"[\w.-]+/[\w./-]+@(v\d+(\.\d+){0,2}|[0-9a-f]{40})$")
+    loose = [u for u in uses if not pinned.match(u) or u.split("@")[0] not in allowed]
+    check(
+        uses and not loose,
+        "every uses: is checkout, setup-python, or setup-node, pinned to a "
+        "version tag or a full SHA%s" % (" (not: %s)" % ", ".join(loose) if loose else ""),
+    )
+    # Without node, check_inline_script_syntax here and the js/main.js gate
+    # in verify_interactivity.py skip instead of failing.
+    in_job = {s.get("uses", "").strip("'\"").split("@")[0]: s for s in steps}
+    check("actions/setup-node" in in_job, "the verify job sets up node")
+    check("actions/setup-python" in in_job, "the verify job sets up Python")
+    # A setup step under an if: can be skipped, and then node is silently
+    # absent again.
+    gated = sorted(name for name, step in in_job.items() if name and "if" in step)
+    check(not gated, "checkout and setup steps run unconditionally%s" % (
+        " (%s has an if:)" % ", ".join(gated) if gated else ""))
+    checkout = in_job.get("actions/checkout")
+    check(
+        checkout is not None
+        and any(re.fullmatch(r"\s*persist-credentials:\s*false", l) for l in checkout["_with"]),
+        "the verify job checks out with persist-credentials: false",
+    )
+
+    # Least privilege: an indent-0 permissions block granting contents: read,
+    # and write granted nowhere, in block, flow, or write-all form.
+    top = _top_level(lines, "permissions")
+    check(
+        top is not None and _value(lines[top]) == ""
+        and any(re.fullmatch(r"\s+contents:\s*read", lines[n]) for n in _nested(lines, top)),
+        "top-level permissions grant contents: read",
+    )
+    check(
+        not re.search(r":\s*['\"]?write['\"]?\s*([,}#]|$)|write-all", scan, re.M),
+        "no permission is granted write",
+    )
+    check(
+        not re.search(r"\bsecrets\b|GITHUB_TOKEN|github\.token", scan),
+        "the workflow references no secrets, GITHUB_TOKEN, or github.token",
+    )
+    # --check-links and installs need the network; a flaky wifi failure in
+    # the gate teaches people to ignore it. The verifiers need no packages.
+    check("--check-links" not in scan, "no step passes --check-links")
+    network = sorted(set(re.findall(r"\bpip3? install\b|\bnpm\b|\bnpx\b|\bcurl\b|\bwget\b", scan)))
+    check(not network, "no step installs or fetches anything%s" % (
+        " (found: %s)" % ", ".join(network) if network else ""))
+
+    # Triggers. A filtered-out pull request never reports the required check
+    # and sits pending forever, so pull_request takes no filters, and
+    # pull_request_target runs base-branch code with a write token.
+    check("pull_request_target" not in scan, "nothing runs on pull_request_target")
+    trig = _top_level(lines, "on")
+    events = _children(lines, trig) if trig is not None else {}
+    if check("pull_request" in events, "the workflow runs on pull_request"):
+        keys = _children(lines, events["pull_request"])
+        filters = sorted(set(keys) & {"paths", "paths-ignore", "types", "branches-ignore"})
+        check(not filters, "pull_request has no paths, types, or branches-ignore filter%s" % (
+            " (has %s)" % ", ".join(filters) if filters else ""))
+        check(
+            "branches" not in keys or "main" in _flow_or_block_items(lines, keys["branches"]),
+            "pull_request branches:, if present, includes main",
+        )
+    if check("push" in events, "the workflow runs on push"):
+        keys = _children(lines, events["push"])
+        check(
+            "branches" in keys and "main" in _flow_or_block_items(lines, keys["branches"]),
+            "push names main under branches:",
+        )
+        filters = sorted(set(keys) & {"branches-ignore", "tags", "tags-ignore",
+                                      "paths", "paths-ignore"})
+        check(not filters, "push has no other filter%s" % (
+            " (has %s)" % ", ".join(filters) if filters else ""))
+
+
 def main():
     check_jquery_version()
     check_no_unescaped_interpolation()
@@ -420,6 +709,7 @@ def main():
     check_no_ie_conditional_shims()
     check_font_awesome_is_single_local_version()
     check_inline_script_syntax()
+    check_ci_workflow()
 
     print()
     if failures:
