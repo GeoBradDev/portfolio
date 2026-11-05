@@ -486,7 +486,7 @@ def json_ld_blocks(source):
     """
     blocks = []
     pattern = re.compile(
-        r'<script\b[^>]*\btype\s*=\s*"application/ld\+json"[^>]*>(.*?)</script>',
+        r'<script\b[^>]*\btype\s*=\s*"application/ld\+json"[^>]*>(.*?)</script(?=[\s/>])[^>]*>',
         re.S | re.I,
     )
     for body in pattern.findall(source):
@@ -743,7 +743,7 @@ def check_interactive_elements_have_names():
 
 def inline_scripts(source):
     """Bodies of every inline <script> that holds JavaScript, not data."""
-    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script[^>]*>", re.S | re.I)
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script(?=[\s/>])[^>]*>", re.S | re.I)
     data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
     return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
 

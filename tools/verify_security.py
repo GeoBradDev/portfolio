@@ -620,7 +620,7 @@ def _strip_js_comments(code):
 
 def _inline_script_bodies(source):
     """Every inline <script> body that holds JavaScript rather than data."""
-    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script[^>]*>", re.S | re.I)
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script(?=[\s/>])[^>]*>", re.S | re.I)
     data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
     return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
 
@@ -759,7 +759,7 @@ def check_inline_script_syntax():
     # script to check" assertion below. Match any script tag without a src
     # attribute instead; a tag WITH src loads external code that this check
     # is not meant to see.
-    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script[^>]*>", re.S | re.I)
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script(?=[\s/>])[^>]*>", re.S | re.I)
 
     # A script tag whose type is a data type holds data, not JavaScript.
     # node --check rejects a JSON-LD block outright, reading the first colon
