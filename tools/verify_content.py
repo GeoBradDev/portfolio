@@ -53,9 +53,12 @@ LEFTOVER_TEMPLATE_FILES = [
 # Families that a bundled stylesheet defines rather than the page itself, as
 # lowercased family name -> the href substring that proves it is linked. A
 # page may name one of these without carrying its own @font-face.
-FONT_FAMILIES_FROM = {
-    "fontawesome": "css/font-awesome.min.css",
-}
+#
+# Empty since issue 31. Its one entry was FontAwesome, from a Font Awesome
+# stylesheet that no page links any more: the icons are inline SVG now. The
+# mechanism stays, because the next stylesheet that brings a family with it
+# needs exactly this and not a looser match.
+FONT_FAMILIES_FROM = {}
 
 failures = []
 
@@ -418,10 +421,10 @@ def check_resume_declares_no_unloaded_font():
     containing the family name, with the space spelled either as + or as
     %20, since that is as far as a source-level check can see without
     fetching and parsing the stylesheet. And a family defined inside an
-    already-linked external stylesheet, such as FontAwesome in
-    css/font-awesome.min.css, is recognized only through FONT_FAMILIES_FROM
-    below. Add an entry there rather than loosening the match when a page
-    starts declaring a family that some other stylesheet provides.
+    already-linked external stylesheet, rather than by the page or by a
+    font URL, is recognized only through FONT_FAMILIES_FROM above. Add an
+    entry there rather than loosening the match when a page starts declaring
+    a family that some other stylesheet provides.
     """
     print("\nresume.html declares no font it does not load")
 

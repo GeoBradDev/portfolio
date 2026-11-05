@@ -549,13 +549,17 @@ class AccessibleNames(HTMLParser):
     An accessible name here comes from one of four places, which is what a
     browser's accname computation actually falls back through for these
     elements: aria-label on the element, aria-labelledby on it, text inside
-    it, or the alt text of an image inside it. A Font Awesome <i> contributes
-    nothing, because the glyph is a CSS ::before on an empty element.
+    it, or the alt text of an image inside it. An icon contributes nothing:
+    every icon on the site is an inline <svg> that is hidden from assistive
+    tech, so a link whose only content is one still needs its own name.
 
-    Also flags a decorative icon that is NOT hidden from assistive tech.
-    Font Awesome 4 glyphs live in the Private Use Area, and a screen reader
-    that reaches one announces whatever its character database says, which
-    is at best nothing and at worst a wrong word ahead of the real name.
+    Also flags two icon defects. Any <svg> that is not both
+    aria-hidden="true" and focusable="false": an unhidden SVG is announced
+    as an unlabelled graphic ahead of the real name, and focusable="false"
+    keeps the legacy engines that made SVGs tab stops from adding one. And
+    any <i> or <span> still carrying a Font Awesome class (fa, fa-*): issue
+    31 removed Font Awesome, so such an element renders as nothing at all
+    and its icon has silently disappeared.
     """
 
     NAMED_BY = ("aria-label", "aria-labelledby", "title")
@@ -584,11 +588,23 @@ class AccessibleNames(HTMLParser):
         if tag == "img" and self.stack:
             if (attrs.get("alt") or "").strip():
                 self.stack[-1]["text"] += attrs["alt"]
-        if tag == "i" and "fa" in (attrs.get("class") or "").split():
+        classes = (attrs.get("class") or "").split()
+        if tag in ("i", "span") and any(
+            token == "fa" or token.startswith("fa-") for token in classes
+        ):
+            self.problems.append(
+                "line %d: <%s class=\"%s\"> is a Font Awesome icon, and Font "
+                "Awesome is no longer loaded, so it renders nothing"
+                % (self.getpos()[0], tag, " ".join(classes))
+            )
+        if tag == "svg":
             if (attrs.get("aria-hidden") or "").lower() != "true":
                 self.problems.append(
-                    'line %d: decorative <i class="fa ..."> is not aria-hidden'
-                    % self.getpos()[0]
+                    'line %d: <svg> is not aria-hidden="true"' % self.getpos()[0]
+                )
+            if (attrs.get("focusable") or "").lower() != "false":
+                self.problems.append(
+                    'line %d: <svg> is not focusable="false"' % self.getpos()[0]
                 )
 
     def handle_startendtag(self, tag, attrs):
@@ -623,9 +639,9 @@ class AccessibleNames(HTMLParser):
 
         An element that opens and never closes leaves its frame on the stack,
         and handle_endtag only judges frames it pops. Without this, adding
-        <a href="/x"><i class="fa fa-rss" aria-hidden="true"></i> with no
-        </a> ships an unnamed link past a green gate. Verified: the same
-        markup with the closing tag was reported, and without it was not.
+        <a href="/x"> holding only a hidden icon, with no </a>, ships an
+        unnamed link past a green gate. Verified: the same markup with the
+        closing tag was reported, and without it was not.
         """
         while self.stack:
             self.judge(self.stack.pop())
@@ -707,6 +723,57 @@ def check_interactive_elements_have_names():
                 fail("%s %s" % (path.name, problem))
         else:
             print("  PASS  %s names every link, button, and icon" % path.name)
+
+
+def inline_scripts(source):
+    """Bodies of every inline <script> that holds JavaScript, not data."""
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script>", re.S | re.I)
+    data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
+    return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
+
+
+def check_renderer_icons_are_hidden():
+    """The portfolio cards build their icons at runtime, out of the parser's reach.
+
+    AccessibleNames reads the markup as shipped, and the star, Live Demo, and
+    Code icons on every card do not exist until the inline renderer in
+    index.html creates them. So this reads the renderer instead. Its icons
+    have to be real SVG elements, which only createElementNS with the SVG
+    namespace makes (createElement("svg") makes an HTMLUnknownElement that
+    draws nothing), and the helper that makes them has to set aria-hidden
+    and focusable on what it creates, for the same reasons the static rule
+    gives.
+    """
+    print("\nThe portfolio renderer builds hidden SVG icons")
+
+    source = read_markup_or_fail(INDEX)
+    if source is None:
+        return
+    script = "\n".join(inline_scripts(source))
+
+    created = re.search(
+        r"createElementNS\(\s*([\"'])http://www\.w3\.org/2000/svg\1\s*,\s*([\"'])svg\2\s*\)",
+        script,
+    )
+    if not check(
+        created is not None,
+        "the renderer creates its icons with createElementNS in the SVG namespace",
+    ):
+        return
+
+    # The statements after the <svg> is created, up to the helper's return.
+    end = script.find("return", created.end())
+    helper = script[created.end():end if end != -1 else len(script)]
+    for attribute, value in (("aria-hidden", "true"), ("focusable", "false")):
+        check(
+            re.search(
+                r"setAttribute\(\s*([\"'])%s\1\s*,\s*([\"'])%s\2\s*\)"
+                % (re.escape(attribute), value),
+                helper,
+            )
+            is not None,
+            'the renderer sets %s="%s" on every icon it creates' % (attribute, value),
+        )
 
 
 def check_new_tab_links_carry_rel():
@@ -1150,6 +1217,7 @@ def main():
     check_homepage_has_person_structured_data()
     check_images_have_alt_text()
     check_interactive_elements_have_names()
+    check_renderer_icons_are_hidden()
     check_new_tab_links_carry_rel()
     check_form_controls_are_labelled()
     check_skip_link_and_focus_visibility()

@@ -53,8 +53,8 @@ WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 TOOLS = ROOT / "tools"
 
 # Every page at the repo root, discovered once from the filesystem instead of
-# hardcoded per check. check_no_plain_http_assets and
-# check_font_awesome_is_single_local_version used to each list the pages by
+# hardcoded per check. check_no_plain_http_assets and the Font Awesome check
+# that check_icons_are_inline_svg replaced used to each list the pages by
 # hand, which meant a page added after those lists were written was silently
 # exempt from both scans. The named constants above stay, for the checks that
 # mean one specific file by name rather than "every page".
@@ -304,8 +304,42 @@ def check_no_ie_conditional_shims():
     check("maxcdn.com" not in source, "index.html does not reference the dead MaxCDN host")
 
 
-def check_font_awesome_is_single_local_version():
-    print("\nFont Awesome is one local version site-wide")
+def _without_html_comments(source):
+    """Strip HTML comments so a scan reads markup, not prose about markup.
+
+    Same reason as verify_content.without_comments: a comment explaining why
+    Font Awesome is gone has to name it.
+    """
+    return re.sub(r"<!--.*?-->", "", source, flags=re.S)
+
+
+def _inline_script_bodies(source):
+    """Every inline <script> body that holds JavaScript rather than data."""
+    tagged = re.compile(r"<script(?![^>]*\bsrc\s*=)([^>]*)>(.*?)</script>", re.S)
+    data = re.compile(r'\btype\s*=\s*"application/(?:ld\+)?json"', re.I)
+    return [body for attrs, body in tagged.findall(source) if not data.search(attrs)]
+
+
+def _is_font_awesome_class(token):
+    """fa and fa-* are Font Awesome 4; fas, fab, far, fal are 5 and 6."""
+    return token in ("fa", "fas", "fab", "far", "fal") or token.startswith("fa-")
+
+
+def check_icons_are_inline_svg():
+    """Issue 31 replaced Font Awesome 4.7 with inline SVG symbols.
+
+    Replaces check_font_awesome_is_single_local_version, which asserted one
+    local Font Awesome major site-wide. There is no Font Awesome major left
+    to be single, so this asserts that none returns, from any source, and
+    that every icon the sprite approach draws actually resolves.
+
+    The resolution half is the part nothing else can catch. A <use> naming a
+    symbol id the page does not define renders an empty box: no network
+    error, no console error, nothing in Lighthouse. The same is true of an
+    icon name the portfolio renderer asks for, so its icon("...") calls are
+    resolved against index.html's sprite too.
+    """
+    print("\nIcons are inline SVG, and no Font Awesome remains")
 
     # HTML_PAGES is discovered from the filesystem, not hardcoded, so a page
     # added after this check was written is scanned automatically.
@@ -314,29 +348,58 @@ def check_font_awesome_is_single_local_version():
         source = read_or_fail(path)
         if source is None:
             continue
-        pages[path.name] = source
+        pages[path.name] = _without_html_comments(source)
 
     for name, source in pages.items():
         check(
             "cdnjs.cloudflare.com" not in source,
             "%s loads no asset from cdnjs" % name,
         )
-        # FA5 and FA6 split the base class into fas/far/fab. FA4 uses a bare
-        # fa. Finding either style class means two majors are in play.
-        fa_six = re.search(r'class="[^"]*\bfa[sbrl]\s+fa-', source)
+        links = re.findall(r"<link\b[^>]*>", source, re.I)
+        fa_links = [tag for tag in links if re.search(r"font-?awesome", tag, re.I)]
+        check(not fa_links, "%s links no Font Awesome stylesheet" % name)
+
+        classes = []
+        for value in re.findall(r'\bclass\s*=\s*"([^"]*)"', source):
+            classes.extend(token for token in value.split() if _is_font_awesome_class(token))
+        # The renderer sets classes from string literals, which the markup
+        # scan above never sees: el("i", "fa fa-star") was exactly that.
+        for body in _inline_script_bodies(source):
+            for _, literal in re.findall(r"([\"'])((?:(?!\1).)*)\1", body):
+                classes.extend(
+                    token for token in literal.split() if _is_font_awesome_class(token)
+                )
         check(
-            fa_six is None,
-            "%s uses no FA5/FA6 style class (fas, fab, far, fal)" % name,
+            not classes,
+            "%s uses no Font Awesome class (fa, fa-*, fas, fab, far, fal)%s"
+            % (name, " (found %s)" % ", ".join(sorted(set(classes))) if classes else ""),
         )
 
-    for name in ("index.html", "resume.html"):
-        source = pages.get(name)
-        if source is None or "fa-" not in source:
-            continue
+        symbols = set(re.findall(r'<symbol\b[^>]*\bid\s*=\s*"([^"]+)"', source))
+        used = re.findall(r'<use\b[^>]*\b(?:xlink:)?href\s*=\s*"#([^"]+)"', source)
+        missing = sorted(set(used) - symbols)
         check(
-            "css/font-awesome.min.css" in source,
-            "%s links the local css/font-awesome.min.css" % name,
+            not missing,
+            "%s: every <use> resolves to a <symbol> on the same page%s"
+            % (name, " (missing %s)" % ", ".join(missing) if missing else ""),
         )
+        if name in ("index.html", "resume.html"):
+            # Both pages draw icons. Finding no <use> at all means the scan
+            # broke or the icons vanished, not that everything resolved.
+            check(bool(used), "%s draws its icons with <use>" % name)
+
+    index = pages.get("index.html")
+    if index is not None:
+        script = "\n".join(_inline_script_bodies(index))
+        symbols = set(re.findall(r'<symbol\b[^>]*\bid\s*=\s*"([^"]+)"', index))
+        asked = re.findall(r"\bicon\(\s*[\"']([\w-]+)[\"']\s*\)", script)
+        if check(bool(asked), "the portfolio renderer draws its icons with icon(name)"):
+            missing = sorted(set("icon-" + name for name in asked) - symbols)
+            check(
+                not missing,
+                "every icon the renderer asks for has a symbol in index.html%s"
+                % (" (missing %s)" % ", ".join(missing) if missing else ""),
+            )
 
 
 def check_inline_script_syntax():
@@ -707,7 +770,7 @@ def main():
     check_repo_urls_are_scheme_validated()
     check_no_plain_http_assets()
     check_no_ie_conditional_shims()
-    check_font_awesome_is_single_local_version()
+    check_icons_are_inline_svg()
     check_inline_script_syntax()
     check_ci_workflow()
 
