@@ -282,6 +282,18 @@ focusable, and under `prefers-reduced-motion: reduce` it opens without the trans
 Remove the `jquery.min.js` and `bootstrap.min.js` `<script>` tags. Commit:
 `feat: rewrite main.js without jQuery and drop Bootstrap JS`.
 
+As built:
+- The collapse animation is the JS-set height transition, as Bootstrap ran it: `.is-open`
+  shows the menu, `.is-collapsing` exists only for the 350ms, a `transitionend` filtered to
+  the menu's own `height` (the links' color transitions bubble up too) plus a 400ms timeout
+  ends it, and it is skipped when the toggle is hidden or reduced motion is set.
+- `changeActiveNavLink()` probes at `scrollY + navHeight() + 1`. Section tops are fractional
+  and scroll offsets whole, so a nav link landed its section up to 0.2px short and left the
+  previous link lit; the drive's new "active link after landing" line caught it on the
+  baseline as well (#services, #portfolio, #contact from mid page).
+- `navHeight()` subtracts the open menu only while the toggle is shown, so a menu left open
+  across a resize to 1440 does not shrink the probe there.
+
 ### Task 3: Replace bootstrap.min.css
 
 Red first:

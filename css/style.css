@@ -454,6 +454,58 @@ Navigation
     box-shadow: inset 0 1px 0 rgba(0, 0, 0, .1);
 }
 
+/* The mobile menu. Below 768px it is out of the layout, and so out of the
+   tab order, until js/main.js marks it .is-open. .is-collapsing exists only
+   for the 350ms height animation Bootstrap's collapse plugin used to run,
+   and main.js skips it when the visitor asked for reduced motion. From
+   768px up the links sit inline and the toggle is hidden, whatever state
+   the menu was left in. */
+@media (max-width: 767px) {
+    .navbar-collapse {
+        display: none;
+    }
+
+    .navbar-collapse.is-open {
+        display: block;
+        overflow-y: auto;
+    }
+
+    .navbar-collapse.is-collapsing {
+        position: relative;
+        overflow: hidden;
+        -webkit-transition: height .35s ease;
+        -o-transition: height .35s ease;
+        transition: height .35s ease;
+    }
+}
+
+@media (min-width: 768px) {
+    .navbar-collapse {
+        display: block;
+        height: auto !important;
+        overflow: visible !important;
+    }
+}
+
+/* Native smooth scrolling for every in-page link: the nav, the hero chevron,
+   the skip link, and back to top. Only for a visitor who has not asked for
+   reduced motion; everyone else jumps, which the jQuery version did by
+   animating over zero milliseconds. */
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+/* Where a fragment lands: below the fixed header, not under it. 63px is the
+   collapsed sticky header measured at both 375px and 1440px, 6px padding top
+   and bottom, the 50px bar, and the 1px bottom border .nav-sticky adds. The
+   header is always sticky by the time a section below the hero is reached,
+   and the mobile menu closes before the fragment navigation starts. */
+.one-page-section {
+    scroll-margin-top: 63px;
+}
+
 
 /*----------------------------------------
 Home
