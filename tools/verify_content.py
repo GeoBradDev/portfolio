@@ -306,6 +306,9 @@ def check_contact_form_spacing_is_declared():
     css = read_or_fail(STYLE_CSS)
     if css is None:
         return
+    # A declaration inside a comment declares nothing: `/* display: grid */`
+    # in the #contact-form rule used to satisfy the grid assertion below.
+    css = without_comments(css, "css")
 
     margin_bottom = re.compile(r"(?<!-)margin-bottom\s*:")
     check(
