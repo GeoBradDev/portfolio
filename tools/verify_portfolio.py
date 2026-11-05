@@ -17,9 +17,10 @@ additionally probe the URLs that actually shipped in projects.json, which needs
 the network and is therefore not part of the default gate.
 
 The emoji scan below covers index.html and projects.json alone. resume.html
-carries a moon and a sun glyph on its dark mode toggle at lines 368, 460, and
-466. Those are visible UI on a page issue 20 does not mention, and swapping
-them for Font Awesome glyphs is a design change this issue did not ask for.
+carries a moon and a sun glyph on its dark mode toggle, in the button's markup
+and in the script that relabels it. Those are visible UI on a page issue 20
+does not mention, and swapping them for icons from the page's SVG sprite is a
+design change this issue did not ask for.
 """
 
 import json

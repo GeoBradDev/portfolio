@@ -113,8 +113,10 @@ Made checkable for this run:
 - `CLAUDE.md`: reconciled in Phase 8 by the coordinator, not by the implementer.
 - This plan.
 
-Not changed: `privacy.html`, `thanks.html`, `404.html` (none loads any of the three
-libraries), `.github/workflows/verify.yml`, `projects.json`, `tools/build_projects.py`, the
+Not changed: `privacy.html`, and `thanks.html` and `404.html` apart from one CSS comment each
+(none loads any of the three libraries, but each comment said the page avoided "pulling in
+bootstrap.min.css and style.css", and `verify_assets` rejects a page that names a dead asset
+outside an HTML comment; found by task 4's red run), `.github/workflows/verify.yml`, `projects.json`, `tools/build_projects.py`, the
 emoji glyphs on `resume.html`'s theme toggle (out of scope, as `verify_portfolio.py` already
 documents), the dead `#particles-js`/`.owl-*`/`.mfp-*` CSS (out of scope, CLAUDE.md says no
 issue covers it), the loader's behavior (issue #32).
