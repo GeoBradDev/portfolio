@@ -16,6 +16,10 @@ real `main()` wrote 2 cards and both of its assertions, which expect 1, failed a
 production code. A fixture bug in the test's own setup. Only the fetcher changed, to return the
 repo for the first account alone; no assertion changed.
 
+Round 1 review: directed by the orchestrator on 2026-11-05. The check is revised in its own red
+commit (R1 and V1 to V6 below) after the first freeze was lifted on green, and is frozen again
+from that commit until the production fix passes it.
+
 Domain skills: none applicable. frontend-design: not applicable because nothing visible changes
 once the cards render; the only visible difference is a taller loading placeholder. The
 chrome-devtools MCP skills: not applicable because that server is not connected this session; the
@@ -132,10 +136,23 @@ Added by this plan, from the orchestrator's constraints:
   - `.portfolio-loading` gains `flex: 0 0 100%` and
     `min-height: calc(round(up, var(--portfolio-cards) / var(--portfolio-cols), 1) * (var(--portfolio-card-height) + var(--portfolio-row-gap)))`,
     with a comment saying why the placeholder carries the grid's final height, that every exit
-    path of the renderer replaces it, and that the declaration is dropped where `round()` is
-    unsupported.
-  - `#portfolio` gains `overflow-anchor: none`, with a comment carrying the anchor explanation
-    above in two or three sentences.
+    path of the renderer replaces it, and that where `round()` is unsupported the value, which
+    holds `var()`, is invalid at computed-value time and `min-height` falls back to `auto`.
+  - `#portfolio:has(.portfolio-loading, .portfolio-status)` gets `overflow-anchor: none`, with a
+    comment carrying the anchor explanation above in two or three sentences. (Round 1 departure:
+    the first version put it on `#portfolio` itself, permanently. Review measured that this takes
+    the anchor away from a visitor reading the cards: 200 px added inside `#about` moved the card
+    under the viewport middle 200 px, reflowed paragraphs moved it 156 px at 375 and 78 at 1440,
+    and a 375x812 to 812x375 rotation sent it to -1125, against 0 and still visible on main.
+    Scoped with `:has()` to the placeholder and the status rows, all of those match main, and the
+    error and empty deep links still land within 0.23 px. Scoped to the placeholder alone, the
+    error and empty deep links jumped by -592 and -225 px, because the exclusion lifts in the same
+    frame the reservation collapses. A browser without `:has()` drops the rule and keeps normal
+    anchoring.)
+- `tools/build_projects.py`, also: the "Wrote" line prints `OUTPUT.name` instead of
+  `OUTPUT.relative_to(ROOT)`. Unplanned: the gate's offline run of `main()` points `OUTPUT` at a
+  temporary file, and `relative_to(ROOT)` raises on a path outside the repository. A normal run
+  prints the same text.
 - `index.html`: no change. The renderer already writes `.portfolio-loading` first and replaces it
   on success, empty, and error. Verified, not edited.
 - `tools/verify_portfolio.py`: one new check, `check_grid_reserves_its_final_height`, registered in
@@ -150,12 +167,20 @@ Added by this plan, from the orchestrator's constraints:
      `#github-projects` rule. (Departure: pinned exactly rather than "references all four
      variables", because a formula that names all four and multiplies where it should divide
      passes the looser test.)
-  3. No rule whose selector is `.portfolio-card` declares a `height` other than
-     `var(--portfolio-card-height)`, and no rule whose selector is `.portfolio-item` declares
-     `flex` or `max-width` without `var(--portfolio-cols)` or a `padding` without
-     `var(--portfolio-row-gap)`. This is what keeps the layout and the reservation reading the same
-     numbers.
-  4. The `#portfolio` rule declares `overflow-anchor: none`.
+  3. The base `.portfolio-card` `height` and `.portfolio-item` `flex`, `max-width`, and `padding`
+     are pinned exactly (whitespace removed, a trailing `!important` tolerated) on the top-level
+     rule with exactly that selector, and no other rule, in any context, sets a height, margin, or
+     box-sizing on a card, or those plus a padding, flex, or width on an item; `#github-projects`
+     sets no `gap`. The four grid variables are set only on rules whose selector is exactly
+     `#github-projects` (any media context), and the three besides the count have a top-level base
+     value. (Round 1 departure: the first version checked only that item and card values mentioned
+     a variable, which passed `calc(50% / var(--portfolio-cols))`, an extra 10 px of padding, a
+     child override of a variable, and a height on an item.)
+  4. The only `overflow-anchor` declaration anywhere in the stylesheet is `none`, `!important`
+     tolerated, on the top-level `#portfolio:has(.portfolio-loading, .portfolio-status)` rule. A
+     permanent exclusion on `#portfolio`, `html { overflow-anchor: none }`, or an `auto` override
+     elsewhere all FAIL. Custom property names are compared case-sensitively, and the renderer's
+     `loadPortfolio()` call is found with a whitespace-tolerant pattern that also accepts `void`.
   5. The renderer in `index.html` still writes a `portfolio-loading` element as the container's
      initial content.
   6. The generator warns: call `build_projects.stylesheet_card_count_warning` (via the existing
@@ -221,6 +246,17 @@ Source check, `verify_portfolio.py`:
 - M18 `stylesheet_card_count_warning` always returns `None` (the warning removed) -> FAIL
   check 6; M19 it returns a warning that omits the new count -> FAIL; M20 `main()` no longer
   calls it -> FAIL.
+- Round 1: R1a the exclusion back on plain `#portfolio`, R1b the scoped rule plus a permanent
+  `#portfolio` copy, R1c scoped to `.portfolio-loading` alone -> FAIL check 4. V1 a child override
+  of each variable (`.portfolio-item { --portfolio-cols: 4 }`, `.portfolio-loading
+  { --portfolio-card-height: 0px }`, the 992 block written on `.portfolio-item`) -> FAIL. V2
+  `.portfolio-item { height: 400px }`, padding `40px 15px var(--portfolio-row-gap) 15px`, flex
+  `calc(50% / var(--portfolio-cols))`, an item or card margin, `#github-projects { row-gap }` ->
+  FAIL. V3 `html { overflow-anchor: none }`, `.one-page-section { overflow-anchor: auto
+  !important }` -> FAIL. V4 controls that must PASS: `!important` on the scoped rule and on the
+  `min-height`, the `loadPortfolio();` call re-indented or written `void loadPortfolio();`, and an
+  unrelated `--Portfolio-Cards: 1` (custom properties are case-sensitive). V6
+  `--portfolio-cards: 07` must PASS the gate and must not make the generator warn.
 - Control: the unmutated branch passes, and M17 a cosmetic change (reflowing whitespace inside the
   `min-height` value) still passes, so the check is not matching on formatting.
 
@@ -237,11 +273,14 @@ Browser, `probe40.py` plus the width sweep:
 - The `.portfolio-item` refactor from `33.333%` to `calc(100% / 3)` changes the column width by a
   few thousandths of a pixel. Screenshot the rendered grid at 375, 800, and 1440 before and after
   and compare card boxes; any difference over 1 px is a defect.
-- `overflow-anchor: none` on `#portfolio` changes what Chromium anchors to whenever the
-  portfolio is under the header. With the reservation in place nothing above `#contact` changes
-  size on the success path, so this only matters in the collapse cases it exists for. One
-  consequence to accept: in the error state, a visitor looking at the portfolio heading with
-  `#contact` also in view keeps `#contact` fixed, so the heading moves up. Rare state, rare view.
+- The anchor exclusion changes what Chromium anchors to while `#portfolio` holds the placeholder
+  or a status row. The first version applied it permanently and claimed that only mattered in the
+  collapse cases; review (finder2 F2) showed that was false, because after render a visitor
+  reading the cards then had no anchor and any height change above the section moved them. It is
+  now scoped with `:has()`, so once the cards render anchoring is exactly main's. One consequence
+  to accept: in the error and empty states the exclusion stays, so a visitor looking at the
+  portfolio heading with `#contact` also in view keeps `#contact` fixed and the heading moves.
+  The status row is a single line, so there is little to read there. Rare state, rare view.
 - A visitor who zooms text only (minimum font size) does not change px heights; the card height is
   fixed px and its content is clipped, so the reservation still matches.
 - The riskiest step is the source check's precision: earlier runs found checks that passed
