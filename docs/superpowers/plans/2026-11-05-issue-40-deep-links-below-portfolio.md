@@ -23,6 +23,10 @@ were reworded without changing any assertion (D1): they said a broken count or a
 placeholder lands deep links off in every browser, but Chromium compensates through anchoring
 while the exclusion is on (measured as B1), so they now name browsers without scroll anchoring.
 
+Round 2 review: directed by the orchestrator on 2026-11-05. The check is revised again in its own
+red commit (F3 item borders, F4 the generator reading `7 !important` as 7, N1 messages that print
+the exact expected text, and F1 message corrections), frozen until the generator passes it.
+
 Domain skills: none applicable. frontend-design: not applicable because nothing visible changes
 once the cards render; the only visible difference is a taller loading placeholder. The
 chrome-devtools MCP skills: not applicable because that server is not connected this session; the
@@ -173,8 +177,12 @@ Added by this plan, from the orchestrator's constraints:
   3. The base `.portfolio-card` `height` and `.portfolio-item` `flex`, `max-width`, and `padding`
      are pinned exactly (whitespace removed, a trailing `!important` tolerated) on the top-level
      rule with exactly that selector, and no other rule, in any context, sets a height, margin, or
-     box-sizing on a card, or those plus a padding, flex, or width on an item; `#github-projects`
-     sets no `gap`. The four grid variables are set only on rules whose selector is exactly
+     box-sizing on a card, or those plus a padding, border, flex, or width on an item;
+     `#github-projects` sets no `gap`. (Round 2: item borders added, because an item's height is
+     its card plus padding plus border. A card border is not checked: the card's height is fixed
+     and its box-sizing, which would make a border add, is checked.) Every pinned value, the
+     reservation formula, the anchor selector, and the renderer pattern are printed as written in
+     the failure message, so a legitimate reformat is a one-line fix. The four grid variables are set only on rules whose selector is exactly
      `#github-projects` (any media context), and the three besides the count have a top-level base
      value. (Round 1 departure: the first version checked only that item and card values mentioned
      a variable, which passed `calc(50% / var(--portfolio-cols))`, an extra 10 px of padding, a
@@ -260,6 +268,9 @@ Source check, `verify_portfolio.py`:
   `min-height`, the `loadPortfolio();` call re-indented or written `void loadPortfolio();`, and an
   unrelated `--Portfolio-Cards: 1` (custom properties are case-sensitive). V6
   `--portfolio-cards: 07` must PASS the gate and must not make the generator warn.
+- Round 2: F3 `.portfolio-item { border-bottom: 40px solid transparent }` -> FAIL. F4 the
+  generator no longer stripping a trailing `!important` -> FAIL; `--portfolio-cards: 7 !important`
+  in the stylesheet -> PASS (control).
 - Control: the unmutated branch passes, and M17 a cosmetic change (reflowing whitespace inside the
   `min-height` value) still passes, so the check is not matching on formatting.
 

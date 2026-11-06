@@ -424,14 +424,15 @@ def check_no_emoji_in_the_homepage():
         )
 
 
-# The one formula the loading placeholder may carry, whitespace removed. Pinned
+# The one formula the loading placeholder may carry, compared with whitespace
+# removed and printed as written when it is missing. Pinned
 # exactly rather than "mentions all four variables", because a formula that
 # names all four and multiplies where it should divide reserves the wrong
 # height just as surely as a literal does. Changing the formula means changing
 # this line, on purpose.
 RESERVATION = (
-    "calc(round(up,var(--portfolio-cards)/var(--portfolio-cols),1)"
-    "*(var(--portfolio-card-height)+var(--portfolio-row-gap)))"
+    "calc(round(up, var(--portfolio-cards) / var(--portfolio-cols), 1)"
+    " * (var(--portfolio-card-height) + var(--portfolio-row-gap)))"
 )
 
 GRID_VARIABLES = (
@@ -441,28 +442,37 @@ GRID_VARIABLES = (
     "--portfolio-row-gap",
 )
 
-# The base declarations that size a card and an item, whitespace removed, on
-# the top-level rule whose selector is exactly the key's. Pinned for the same
+# The base declarations that size a card and an item, compared with whitespace
+# removed, on the top-level rule whose selector is exactly the key's, and
+# printed as written here when missing, so a legitimate reformat is a
+# one-line fix. Pinned for the same
 # reason as RESERVATION: "reads the variable" passes calc(50% / var(...)) and a
 # padding that adds 10px above the row gap.
 LAYOUT = {
     (".portfolio-card", "height"): "var(--portfolio-card-height)",
-    (".portfolio-item", "flex"): "00calc(100%/var(--portfolio-cols))",
-    (".portfolio-item", "max-width"): "calc(100%/var(--portfolio-cols))",
-    (".portfolio-item", "padding"): "015pxvar(--portfolio-row-gap)15px",
+    (".portfolio-item", "flex"): "0 0 calc(100% / var(--portfolio-cols))",
+    (".portfolio-item", "max-width"): "calc(100% / var(--portfolio-cols))",
+    (".portfolio-item", "padding"): "0 15px var(--portfolio-row-gap) 15px",
 }
 
 # Properties that change the height a card, an item, or the placeholder takes
 # in the grid. Any of them on those elements, other than the pinned ones, is a
 # FAIL. Deliberately not every property: width on a card or color on an item
-# changes no row height and is none of this check's business.
+# changes no row height and is none of this check's business. A border on an
+# item adds to the row, since the item's height is its card plus its padding
+# and border; a border on a card does not, because the card's height is fixed
+# and box-sizing, which would make its border add, is itself checked.
 _HEIGHT = {"height", "min-height", "max-height", "box-sizing"}
 _MARGIN = {"margin", "margin-top", "margin-bottom", "margin-block",
            "margin-block-start", "margin-block-end"}
 _PADDING = {"padding", "padding-top", "padding-bottom", "padding-block",
             "padding-block-start", "padding-block-end"}
 CARD_SIZING = _HEIGHT | _MARGIN
-ITEM_SIZING = _HEIGHT | _MARGIN | _PADDING | {
+_BORDER = {"border", "border-top", "border-bottom", "border-width",
+           "border-block", "border-block-start", "border-block-end",
+           "border-top-width", "border-bottom-width", "border-block-width",
+           "border-block-start-width", "border-block-end-width"}
+ITEM_SIZING = _HEIGHT | _MARGIN | _PADDING | _BORDER | {
     "flex", "flex-basis", "flex-grow", "flex-shrink",
     "width", "min-width", "max-width",
 }
@@ -664,9 +674,8 @@ def check_grid_reserves_its_final_height():
     check(
         declared is not None,
         "--portfolio-cards is a bare integer (found %r); a unit or a decimal "
-        "makes the reservation invalid, it collapses to one line, and in a "
-        "browser without scroll anchoring (Safari) a deep link below the "
-        "portfolio lands off by the whole grid" % value,
+        "makes the reservation invalid, it collapses to one line, and a deep "
+        "link below the portfolio lands off by the whole grid" % value,
     )
     if projects is None:
         fail("projects.json can be read to count the cards; without it nobody "
@@ -675,9 +684,10 @@ def check_grid_reserves_its_final_height():
         check(
             declared == len(projects),
             "--portfolio-cards in css/style.css is %s and projects.json has %d "
-            "cards; update the stylesheet after regenerating, or, in a browser "
-            "without scroll anchoring (Safari), deep links below the portfolio "
-            "land off by the change in rows"
+            "cards; update the stylesheet after regenerating, or deep links "
+            "below the portfolio land off by the change in rows in every "
+            "browser, because the anchor exclusion lifts in the same frame the "
+            "cards replace the placeholder"
             % ("missing" if declared is None else declared, len(projects)),
         )
     for name in GRID_VARIABLES[1:]:
@@ -693,15 +703,14 @@ def check_grid_reserves_its_final_height():
     loading = declared_on(".portfolio-loading", LOADING_SIZING)
     reserving = [d for d in loading
                  if not d[0] and d[1] == [".portfolio-loading"]
-                 and d[2] == "min-height" and squash(d[3]) == RESERVATION]
+                 and d[2] == "min-height" and squash(d[3]) == squash(RESERVATION)]
     others = [d for d in loading if d not in reserving]
     check(
         len(reserving) == 1,
-        "the top-level .portfolio-loading rule's min-height is the grid's final "
-        "height, computed from the four grid variables; without it the "
-        "placeholder is one line tall and, in a browser without scroll "
-        "anchoring (Safari), the cards push a deep-linked section down by the "
-        "whole grid",
+        "the top-level .portfolio-loading rule declares exactly "
+        "`min-height: %s` (whitespace aside); without it the placeholder is one "
+        "line tall and the cards push a deep-linked section down by the whole "
+        "grid" % RESERVATION,
     )
     check(
         not others,
@@ -718,17 +727,18 @@ def check_grid_reserves_its_final_height():
         found = declared_on(subject, props)
         pinned = [d for d in found
                   if not d[0] and d[1] == [subject]
-                  and squash(d[3]) == LAYOUT.get((subject, d[2]))]
+                  and squash(d[3]) == squash(LAYOUT.get((subject, d[2]), ""))]
         stray = [d for d in found if d not in pinned]
-        missing = [p for (s, p) in LAYOUT if s == subject
+        missing = ["%s: %s" % (p, v) for (s, p), v in LAYOUT.items() if s == subject
                    and not any(d[2] == p for d in pinned)]
         check(
             not missing and not stray,
-            "%s is sized only by its pinned declarations (missing: %s; strays: "
-            "%s); any other height, width, column share, padding, or margin "
-            "lays the cards out taller, shorter, or in a different number of "
-            "rows than the space held for them"
-            % (subject, ", ".join(missing) or "none", show(stray)),
+            "%s is sized only by its pinned declarations, on the top-level rule "
+            "with exactly that selector (missing: %s; strays: %s); any other "
+            "height, width, column share, padding, margin, or item border lays "
+            "the cards out taller, shorter, or in a different number of rows "
+            "than the space held for them"
+            % (subject, "; ".join(missing) or "none", show(stray)),
         )
     gaps = declared_on("#github-projects", GRID_GAPS)
     check(
@@ -751,7 +761,8 @@ def check_grid_reserves_its_final_height():
                   if not d[0] and d[1] == [ANCHOR_SELECTOR] and bare(d[3]) == "none"]
     check(
         len(sanctioned) == 1 and len(anchors) == 1,
-        "the only overflow-anchor in css/style.css is none on %s (found %s); "
+        "the only overflow-anchor in css/style.css is exactly `%s { "
+        "overflow-anchor: none; }` at the top level (found %s); "
         "without it an error or empty state moves a deep link by the collapsed "
         "reservation, and with any other one a visitor reading the cards is "
         "moved whenever something above the portfolio changes height"
@@ -773,9 +784,11 @@ def check_grid_reserves_its_final_height():
             r"<div class=(['\"])([^'\"]*\s)?portfolio-loading(\s[^'\"]*)?\1", first
         ) is not None,
         "the renderer writes a .portfolio-loading element as the grid's initial "
-        "content (found %r); without it nothing holds the space while loading "
-        "and, in a browser without scroll anchoring (Safari), the cards push a "
-        "deep-linked section down" % first[:60],
+        "content: the last `portfolioContainer.innerHTML = '<div "
+        "class=\"portfolio-loading\">...';` before a `loadPortfolio();` line "
+        "(any indentation, `void` allowed) (found %r); without it nothing holds "
+        "the space while loading and the cards push a deep-linked section "
+        "down" % first[:60],
     )
 
     # 6. The generator warns when the count it writes drifts from the CSS.
@@ -793,6 +806,11 @@ def check_grid_reserves_its_final_height():
         warning_of(7, sheet) is None,
         "the generator stays quiet when the count matches; a false warning "
         "trains whoever regenerates to ignore the one that matters",
+    )
+    check(
+        warning_of(7, sheet.replace(": 7;", ": 7 !important;")) is None,
+        "the generator reads --portfolio-cards: 7 !important as 7, like the "
+        "gate does, instead of asking for a change that changes nothing",
     )
     check(
         warning_of(7, sheet.replace(": 7;", ": 07;")) is None,
