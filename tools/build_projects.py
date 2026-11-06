@@ -39,6 +39,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "projects.json"
+# Read, never written. The loading placeholder in the stylesheet reserves the
+# grid's height from a hand-set card count, and main() warns when the count it
+# just wrote no longer matches. A generated-data script editing a hand-authored
+# file is the line this keeps: the warning says what to change, a person
+# changes it, and verify_portfolio.py fails until they do.
+STYLESHEET = ROOT / "css" / "style.css"
+CARD_COUNT = re.compile(r"--portfolio-cards\s*:\s*([^;}]*)")
 
 # MapTheVoteSTL was removed on 2026-08-13 (issue 20, criterion 4). Its one
 # repo has no description and no topic, so it could never contribute a card.
@@ -172,6 +179,33 @@ def to_project(repo, demo):
     }
 
 
+def stylesheet_card_count_warning(count, css_text):
+    """None when css_text declares --portfolio-cards: count once, else a warning.
+
+    Comments are stripped first, so a declaration that only survives inside a
+    comment counts as missing, which is what the browser sees too.
+    """
+    css = re.sub(r"/\*.*?\*/", "", css_text, flags=re.S)
+    # A trailing !important changes nothing the browser or the gate reads.
+    found = [re.sub(r"\s*!\s*important\s*$", "", value.strip(), flags=re.I)
+             for value in CARD_COUNT.findall(css)]
+    if not found:
+        return ("css/style.css declares no --portfolio-cards; add "
+                "--portfolio-cards: %d to #github-projects, or the loading "
+                "placeholder collapses and deep links below the portfolio land "
+                "off by the whole grid" % count)
+    if len(found) > 1:
+        return ("css/style.css declares --portfolio-cards %d times; keep the one "
+                "on #github-projects as --portfolio-cards: %d" % (len(found), count))
+    # Compared as integers, like the gate and the browser: 07 is 7.
+    if not re.fullmatch(r"\d+", found[0]) or int(found[0]) != count:
+        return ("css/style.css declares --portfolio-cards: %s but projects.json "
+                "now has %d cards; change it to --portfolio-cards: %d, or deep "
+                "links below the portfolio land off by the change in rows in "
+                "every browser" % (found[0], count, count))
+    return None
+
+
 def github_request(url):
     """A request to api.github.com, carrying the token when one is set.
 
@@ -290,7 +324,11 @@ def main():
     }
     OUTPUT.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
                       encoding="utf-8")
-    print("Wrote %s with %d project(s)." % (OUTPUT.relative_to(ROOT), len(projects)))
+    print("Wrote %s with %d project(s)." % (OUTPUT.name, len(projects)))
+    css_text = STYLESHEET.read_text(encoding="utf-8") if STYLESHEET.exists() else ""
+    warning = stylesheet_card_count_warning(len(projects), css_text)
+    if warning:
+        print("  WARN  " + warning, file=sys.stderr)
     if failed:
         print("  %d account(s) failed and contributed nothing: %s"
               % (len(failed), ", ".join(failed)), file=sys.stderr)

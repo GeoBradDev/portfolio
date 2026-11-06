@@ -1942,6 +1942,17 @@ keyframes animation
 
 /* Portfolio Grid Layout */
 #github-projects {
+    /* The number of entries in projects.json. Set by hand: regenerating the
+       data does not edit this file, so change it whenever the card count
+       changes. verify_portfolio.py fails until it matches, and
+       build_projects.py warns. */
+    --portfolio-cards: 7;
+    /* Columns, card height, and the gap under each row. The card layout and
+       the loading reservation below both read these, so they cannot
+       disagree at any breakpoint; the media queries change only these. */
+    --portfolio-cols: 3;
+    --portfolio-card-height: 320px;
+    --portfolio-row-gap: 30px;
     display: flex;
     flex-wrap: wrap;
     margin: 0 -15px;
@@ -1949,9 +1960,9 @@ keyframes animation
 }
 
 .portfolio-item {
-    flex: 0 0 33.333%;
-    max-width: 33.333%;
-    padding: 0 15px 30px 15px;
+    flex: 0 0 calc(100% / var(--portfolio-cols));
+    max-width: calc(100% / var(--portfolio-cols));
+    padding: 0 15px var(--portfolio-row-gap) 15px;
 }
 
 /* The full-width row the renderer writes for its empty and error states. */
@@ -1974,7 +1985,7 @@ keyframes animation
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
-    height: 320px;
+    height: var(--portfolio-card-height);
     border: 1px solid #f0f0f0;
 }
 
@@ -2157,20 +2168,15 @@ keyframes animation
 
 /* Responsive Design */
 @media (max-width: 992px) {
-    .portfolio-item {
-        flex: 0 0 50%;
-        max-width: 50%;
+    #github-projects {
+        --portfolio-cols: 2;
     }
 }
 
 @media (max-width: 768px) {
-    .portfolio-item {
-        flex: 0 0 100%;
-        max-width: 100%;
-    }
-
-    .portfolio-card {
-        height: 280px;
+    #github-projects {
+        --portfolio-cols: 1;
+        --portfolio-card-height: 280px;
     }
 
     .portfolio-content {
@@ -2187,6 +2193,23 @@ keyframes animation
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     padding: 80px 0;
     position: relative;
+}
+
+/* With a deep link such as /#contact under the fixed header, the strip the
+   header covers shows this section's bottom padding, so Chromium picks
+   #portfolio as its scroll anchor. It is the element that changes height, its
+   top never moves, and nothing is compensated. Excluding it makes the browser
+   anchor to the section below, which covers what the reservation cannot: the
+   error and empty states, where the status row keeps the exclusion on while
+   the reservation collapses. It does not cover a stale card count or a
+   browser without round(): on success the exclusion lifts in the same frame
+   the cards replace the placeholder, so nothing compensates there. Scoped on
+   purpose: once the cards render, #portfolio must be an anchor candidate
+   again, or a visitor reading a card is moved whenever anything above the
+   section changes height. A browser without :has() drops this rule and keeps
+   ordinary anchoring. */
+#portfolio:has(.portfolio-loading, .portfolio-status) {
+    overflow-anchor: none;
 }
 
 #portfolio::before {
@@ -2229,6 +2252,17 @@ keyframes animation
     text-align: center;
     padding: 40px;
     color: #5a6268;
+    /* The placeholder holds the height the cards will take: rows times card
+       height plus the gap under each row. projects.json arrives after the
+       browser has scrolled a deep link into place, and a one-line spinner
+       here meant the cards then pushed everything below them down by the
+       whole grid. The renderer replaces this element on every exit path,
+       success, empty, and error, so the reservation cannot outlive loading.
+       In a browser without round() the value, which holds var(), is invalid
+       at computed-value time, so min-height falls back to auto; an earlier
+       fallback declaration would not be honored. */
+    flex: 0 0 100%;
+    min-height: calc(round(up, var(--portfolio-cards) / var(--portfolio-cols), 1) * (var(--portfolio-card-height) + var(--portfolio-row-gap)));
 }
 
 .portfolio-loading::after {
