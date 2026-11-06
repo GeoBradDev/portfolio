@@ -177,6 +177,28 @@ loads from behind one NAT used to blank the section for everyone sharing that ad
   separately. Do not move it back; `verify_portfolio.py` rejects both `portfolioCSS` and
   `insertAdjacentHTML` in `index.html`.
 
+**The loading placeholder reserves the grid's final height, and `#portfolio` is out of scroll
+anchoring** (issue 40). `projects.json` arrives after the browser has already scrolled a deep link
+such as `/#contact` into place, so a one-line spinner that the cards then replace pushed the
+target down by the whole grid. Two mechanisms hold it, and each covers what the other cannot:
+
+- `.portfolio-loading` takes a `min-height` computed from four custom properties on
+  `#github-projects`: `--portfolio-cards`, `--portfolio-cols`, `--portfolio-card-height`, and
+  `--portfolio-row-gap`. The card layout reads the same four, and the two media queries change
+  only the variables, so the reserved box and the rendered grid cannot disagree at any
+  breakpoint. Never give `.portfolio-card` or `.portfolio-item` a literal height, width, column
+  share, or row gap; `verify_portfolio.py` rejects one. The renderer replaces the placeholder on
+  success, empty, and error, so the reservation never outlives loading, and with JavaScript off
+  no placeholder is written. `--portfolio-cards` is set by hand and must equal the number of
+  entries in `projects.json`.
+- `#portfolio` carries `overflow-anchor: none`. Under the fixed header, the strip the header
+  covers shows this section's bottom padding, so Chromium picks `#portfolio` itself as the scroll
+  anchor; it is the element that grows and its top never moves, so nothing is compensated.
+  Excluding it makes Chromium and Firefox anchor to the section below, which covers the error
+  and empty states, a stale card count, and a browser without CSS `round()`. Safari has no
+  scroll anchoring, so there the reservation alone carries the success path, and the error and
+  empty states still move a deep link by the collapsed reservation. That residual is accepted.
+
 **Comments in that inline `<script>` must not contain the literal strings
 `api.github.com`, `portfolioCSS`, or `insertAdjacentHTML`.** `verify_portfolio.py` strips
 HTML and CSS comments before scanning but deliberately not JavaScript `//` comments: a
@@ -709,9 +731,14 @@ no description carries the `#portfolio` flag; the generator selects on the topic
 description match, an archived repo, and a repo with no `topics` key; one failing account still
 lets the others through while every account failing raises; a demo that does not answer is
 dropped and a non-https one is dropped without probing; the card CSS is in `css/style.css` and
-neither `portfolioCSS` nor `insertAdjacentHTML` survives in `index.html`; and no pictograph
-reaches `index.html` or `projects.json`. Standard library only. Run it after touching the
-renderer, the generator, `projects.json`, or the card CSS.
+neither `portfolioCSS` nor `insertAdjacentHTML` survives in `index.html`; no pictograph
+reaches `index.html` or `projects.json`; and the loading placeholder reserves the grid's final
+height (issue 40): `--portfolio-cards` is declared once, on `#github-projects`, as an integer
+equal to the number of cards, the placeholder's `min-height` is the one reservation formula, the
+card and item rules size themselves from the same variables, `#portfolio` declares
+`overflow-anchor: none`, the renderer still starts with the placeholder, and the generator's
+real `main()`, run offline, warns on drift without writing the stylesheet. Standard library
+only. Run it after touching the renderer, the generator, `projects.json`, or the card CSS.
 
 Things about it worth knowing before editing:
 
@@ -731,6 +758,14 @@ Things about it worth knowing before editing:
 - A pictograph in a repo description would make the generator write a file this rejects.
   `build_projects.py` warns and names the repo and codepoint at generation time, which is where
   the fix is: the description lives on github.com.
+- **The height reservation check is source-level and does not compute a height.** It proves the
+  placeholder and the card layout read the same variables and that the count matches the data,
+  and it reads every copy of a rule, including ones nested in a media query, with comments
+  stripped. It cannot know the column breakpoints are right or that the reserved box and the
+  rendered grid are the same height on screen; that takes a browser, at a width on each side of
+  every breakpoint, with `projects.json` held so the placeholder can be measured. The
+  reservation formula is pinned exactly, whitespace aside, so changing it means changing the
+  check too.
 
 ### Regenerating optimized images
 
@@ -796,10 +831,14 @@ in their description. To add one:
 
 1. Add the `portfolio` topic to the repo on GitHub
 2. Run `python3 tools/build_projects.py`
-3. Commit the changed `projects.json`
+3. If the number of cards changed, set `--portfolio-cards` on `#github-projects` in
+   `css/style.css` to the new count. The generator prints a `WARN` naming the exact line and
+   never edits the stylesheet itself; `verify_portfolio.py` fails until the two agree.
+4. Commit the changed `projects.json`, and `css/style.css` if step 3 touched it
 
 Step 2 is not optional and nothing does it for you. Tagging a repo and stopping there
-changes nothing on the site.
+changes nothing on the site. Skipping step 3 lands every deep link below the portfolio a row
+or more off once the cards render.
 
 A repo will not appear if it is archived, and its "Live Demo" button will not appear if its
 homepage does not answer. Both are deliberate; the generator prints a `WARN` naming the
