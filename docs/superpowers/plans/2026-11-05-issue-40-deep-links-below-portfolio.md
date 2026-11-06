@@ -98,9 +98,13 @@ Prototyped by injection (`proto_both.txt`): all C1 and C2 cases pass, error and 
 stay within 0.3 px. Its CLS figures on `/#contact` are an artifact of injecting the style at
 DOMContentLoaded, after the first fragment scroll; Phase 4 measures the real stylesheet.
 
-Known residual: in Safari only, the error and empty states still move a deep-linked `#contact` up
-by the collapsed reservation, because there is no scroll anchoring to fall back on. Those states
-are rare and the target lands above its spot rather than 2000 px below it.
+Known residual: where the reservation works but the exclusion does not, the error and empty
+states still move a deep-linked `#contact` up by the collapsed reservation. That is Safari, which
+per vendor support data has no scroll anchoring (not measured here), and a browser with `round()`
+but without `:has()` (Firefox 118 to 120), which is inferred from its ordinary scroll anchoring.
+Neither was measured. The approval above names only Safari; the doc review in Phase 8 found the
+second case, which is recorded as a known limit, not as approved. Those states are rare and the
+target lands above its spot rather than 2000 px below it.
 
 ## Acceptance criteria
 
@@ -125,7 +129,7 @@ Added by this plan, from the orchestrator's constraints:
 6. No large blank gap in the error or empty state, or with JavaScript off. Checkable: `#portfolio`
    height in the error and empty states and with JavaScript off is within 5 px of main's.
 7. A card count that no longer matches `projects.json` fails the gate, and
-   `tools/build_projects.py` prints a WARN naming the exact `--portfolio-cards: N` line in
+   `tools/build_projects.py` prints a WARN naming the exact `--portfolio-cards: N` declaration in
    `css/style.css` whenever the count it writes differs from the stylesheet's, without editing
    the stylesheet.
 
@@ -213,7 +217,8 @@ Added by this plan, from the orchestrator's constraints:
   browser drive is the proof that the reservation matches the render.
 - `tools/build_projects.py`: a function, `stylesheet_card_count_warning(count, css_text)`, that
   returns `None` when `css_text` (comments stripped) declares `--portfolio-cards: <count>` and
-  otherwise a warning string naming the exact line to change, for example
+  otherwise a warning string naming the exact declaration to change, for example (the shipped
+  wording differs; see `tools/build_projects.py`)
   `WARN  css/style.css declares --portfolio-cards: 7 but projects.json now has 8 cards; change it to --portfolio-cards: 8 or deep links below the portfolio land a row off`.
   A stylesheet with no declaration, or more than one, also returns a warning that says so.
   `main()` calls it after writing `projects.json`, with the count it wrote and the text of
@@ -285,6 +290,9 @@ Browser, `probe40.py` plus the width sweep:
   row, which proves the reservation is what carries Safari.
 - B3 `overflow-anchor` removed, count right: success-path C1 passes, error and empty deep links
   move by the collapsed reservation, which proves why the fallback exists.
+- B1 measured the first, permanent exclusion. With the scoped exclusion that shipped, B1 no longer
+  holds: a stale count misplaces deep links in Chromium too (see Risks). B2 and B3 measured no
+  exclusion at all and still hold.
 
 ## Risks
 
@@ -306,11 +314,20 @@ Browser, `probe40.py` plus the width sweep:
   a state that is already a failure.
 - Known limit (finder3 F1): the scoped exclusion does not cover the success path. It lifts in the
   same frame the cards replace the placeholder, so a stale `--portfolio-cards` misplaces deep
-  links in every browser by the change in rows (CSS 7 with 3 cards: -591.77 / -224.05 at 375 /
+  links in every browser that supports `round()` by up to the change in rows; an overcount is capped by how far the page
+  can still scroll below the target (CSS 7 with 3 cards: -591.77 / -224.05 at 375 /
   1440; with 10: 930.23 / 349.95; with 16: 2790.23 / 1049.95), which is why the gate fails on
   drift. A browser with `:has()` but without `round()` (Chromium 105 to 124) has neither the
   reservation nor the exclusion active on success and gets the original offset (2063.23 /
   942.95). B1 above measured the permanent exclusion of the first version and no longer holds.
+- Known limit (Phase 7 verifier): deep-link CLS moved rather than going away. On the branch the
+  shift when the cards render is 0 in every run (base 0.9224 / 0.6082 every run). But in about
+  half of cold `/#contact` loads Chromium paints one frame at scrollY 0 before the inline script
+  writes the placeholder, and the next frame inserts it and runs the fragment scroll together;
+  Chromium scores that as a shift sized by the placeholder, so total CLS is 0 or 0.92 (375) and
+  0 or 0.73 (1440), against 0.92 to 1.06 and 0.61 to 0.68 on base. The visitor sees no jump: the
+  first frame shows the hero, the next shows `#contact` at the header. Fixing it means the
+  placeholder existing before first paint, which changes the JavaScript-off page; out of scope.
 - A visitor who zooms text only (minimum font size) does not change px heights; the card height is
   fixed px and its content is clipped, so the reservation still matches.
 - The riskiest step is the source check's precision: earlier runs found checks that passed

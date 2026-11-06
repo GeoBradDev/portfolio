@@ -178,23 +178,27 @@ loads from behind one NAT used to blank the section for everyone sharing that ad
   `insertAdjacentHTML` in `index.html`.
 
 **The loading placeholder reserves the grid's final height, and `#portfolio` is out of scroll
-anchoring until the cards render** (issue 40). `projects.json` arrives after the browser has already scrolled a deep link
-such as `/#contact` into place, so a one-line spinner that the cards then replace pushed the
-target down by the whole grid. Two mechanisms hold it, and each covers what the other cannot:
+anchoring until the cards render** (issue 40). `projects.json` arrives after the browser has
+already scrolled a deep link such as `/#contact` into place, so a one-line spinner that the cards
+then replace pushed the target down by the whole grid. Two mechanisms hold it, and each covers
+what the other cannot:
 
 - `.portfolio-loading` takes a `min-height` computed from four custom properties on
   `#github-projects`: `--portfolio-cards`, `--portfolio-cols`, `--portfolio-card-height`, and
-  `--portfolio-row-gap`. The card layout reads the same four, and the two media queries change
-  only the variables, so the reserved box and the rendered grid cannot disagree at any
-  breakpoint. The four variables belong on `#github-projects` alone, in any media query, never on
-  a card, an item, or the placeholder. The card's `height` and the item's `flex`, `max-width`, and
-  `padding` are pinned to their variable-based values, and nothing else may set a height, margin,
-  or box-sizing on a card, an item, or the placeholder, a padding, flex, or width on an item, or a
-  `gap` on `#github-projects`; `verify_portfolio.py` rejects each of those, in any media query.
-  It does not police other properties. The renderer replaces the placeholder on
-  success, empty, and error, so the reservation never outlives loading, and with JavaScript off
-  no placeholder is written. `--portfolio-cards` is set by hand and must equal the number of
-  entries in `projects.json`.
+  `--portfolio-row-gap`. The card layout reads the last three, and for grid sizing the two media
+  queries change only those variables, so the reserved box and the rendered grid cannot disagree
+  at any breakpoint. The four variables belong on `#github-projects` alone, never on a card, an
+  item, or the placeholder; `--portfolio-cards` is declared once, at the top level, while the
+  other three may be overridden in the grid's media queries.
+- The card's `height` and the item's `flex`, `max-width`, and `padding` are pinned to their
+  variable-based values. `verify_portfolio.py` also rejects, in any media query, a height,
+  box-sizing, or top, bottom, or block-axis margin on a card, an item, or the placeholder; a top,
+  bottom, or block-axis padding or border, a flex, or a width on an item; and a `gap` on
+  `#github-projects`. It does not police other properties, inline-axis margins included, and it
+  sees only rules whose selector names the element.
+- The renderer replaces the placeholder on success, empty, and error, so the reservation never
+  outlives loading, and with JavaScript off no placeholder is written. `--portfolio-cards` is set
+  by hand and must equal the number of entries in `projects.json`.
 - `#portfolio:has(.portfolio-loading, .portfolio-status)` carries `overflow-anchor: none`, and
   that is the only `overflow-anchor` the stylesheet may declare. Under the fixed header, the strip
   the header covers shows this section's bottom padding, so Chromium picks `#portfolio` itself as
@@ -212,11 +216,14 @@ target down by the whole grid. Two mechanisms hold it, and each covers what the 
   placeholder alone, the exclusion lifts in the same frame the reservation collapses and the
   error and empty deep links jump. A browser without `:has()` drops the rule and keeps ordinary
   anchoring.
-- A stale `--portfolio-cards` lands deep links off by the change in rows in every browser, which
-  is why the gate fails on it. A browser with `:has()` but without `round()` gets the original
-  offset on success, since neither the reservation nor the exclusion is active there. Safari has
-  no scroll anchoring, so its error and empty states still move a deep link by the collapsed
-  reservation. Both residuals are accepted.
+- Known limits. A stale `--portfolio-cards` lands deep links off by up to the change in rows in
+  every browser that supports `round()` (less when the page is too short below the target to
+  scroll that far), which is why the gate fails on it. A browser with `:has()` but without
+  `round()` gets the original offset on success, since neither the reservation nor the exclusion
+  is active there. Safari, which per vendor support data has no scroll anchoring, still moves an
+  error or empty deep link by the collapsed reservation; a browser with `round()` but without
+  `:has()` is expected to do the same. Neither was measured here, since no WebKit or Firefox
+  build could run.
 
 **Comments in that inline `<script>` must not contain the literal strings
 `api.github.com`, `portfolioCSS`, or `insertAdjacentHTML`.** `verify_portfolio.py` strips
@@ -758,8 +765,8 @@ placeholder's `min-height` is the one reservation formula, the card and item siz
 nothing else sizes them, the only `overflow-anchor` is the scoped one on
 `#portfolio:has(.portfolio-loading, .portfolio-status)`, the renderer still starts with the
 placeholder, and the generator's real `main()`, run offline, warns on drift without writing the
-stylesheet. Standard library
-only. Run it after touching the renderer, the generator, `projects.json`, or the card CSS.
+stylesheet. Standard library only. Run it after touching the renderer, the generator,
+`projects.json`, or the card CSS.
 
 Things about it worth knowing before editing:
 
@@ -785,8 +792,9 @@ Things about it worth knowing before editing:
   stripped. It cannot know the column breakpoints are right or that the reserved box and the
   rendered grid are the same height on screen; that takes a browser, at a width on each side of
   every breakpoint, with `projects.json` held so the placeholder can be measured. The
-  reservation formula is pinned exactly, whitespace aside, so changing it means changing the
-  check too.
+  reservation formula and the card and item sizing values are pinned exactly, whitespace aside,
+  and the anchor selector is pinned exactly with runs of whitespace collapsed to one space, so
+  changing any of them, even `:has(a,b)` for `:has(a, b)`, means changing the check too.
 
 ### Regenerating optimized images
 
@@ -853,14 +861,14 @@ in their description. To add one:
 1. Add the `portfolio` topic to the repo on GitHub
 2. Run `python3 tools/build_projects.py`
 3. If the number of cards changed, set `--portfolio-cards` on `#github-projects` in
-   `css/style.css` to the new count. The generator prints a `WARN` naming the exact line and
-   never edits the stylesheet itself; `verify_portfolio.py` fails until the two agree.
+   `css/style.css` to the new count. The generator prints a `WARN` naming the exact declaration
+   and never edits the stylesheet itself; `verify_portfolio.py` fails until the two agree.
 4. Commit the changed `projects.json`, and `css/style.css` if step 3 touched it
 
 Step 2 is not optional and nothing does it for you. Tagging a repo and stopping there
 changes nothing on the site. Skipping step 3 fails the gate, and if it shipped, deep links
-below the portfolio would land off by the change in rows in every browser whenever the change
-alters the row count.
+below the portfolio would land off by up to the change in rows in every browser that supports
+`round()` whenever the change alters the row count.
 
 A repo will not appear if it is archived, and its "Live Demo" button will not appear if its
 homepage does not answer. Both are deliberate; the generator prints a `WARN` naming the
