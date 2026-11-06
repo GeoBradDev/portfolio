@@ -189,15 +189,20 @@ def stylesheet_card_count_warning(count, css_text):
     found = [value.strip() for value in CARD_COUNT.findall(css)]
     if not found:
         return ("css/style.css declares no --portfolio-cards; add "
-                "--portfolio-cards: %d to #github-projects or deep links below "
-                "the portfolio land a whole grid off" % count)
+                "--portfolio-cards: %d to #github-projects, or the loading "
+                "placeholder collapses and, in a browser without scroll "
+                "anchoring (Safari), deep links below the portfolio land off "
+                "by the whole grid" % count)
     if len(found) > 1:
         return ("css/style.css declares --portfolio-cards %d times; keep the one "
                 "on #github-projects as --portfolio-cards: %d" % (len(found), count))
-    if found[0] != str(count):
+    # Compared as integers, like the gate and the browser: 07 is 7.
+    if not re.fullmatch(r"\d+", found[0]) or int(found[0]) != count:
         return ("css/style.css declares --portfolio-cards: %s but projects.json "
-                "now has %d cards; change it to --portfolio-cards: %d or deep "
-                "links below the portfolio land a row off" % (found[0], count, count))
+                "now has %d cards; change it to --portfolio-cards: %d, or, in a "
+                "browser without scroll anchoring (Safari), deep links below "
+                "the portfolio land off by the change in rows"
+                % (found[0], count, count))
     return None
 
 

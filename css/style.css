@@ -2193,13 +2193,19 @@ keyframes animation
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     padding: 80px 0;
     position: relative;
-    /* With a deep link such as /#contact under the fixed header, the strip
-       the header covers shows this section's bottom padding, so Chromium
-       picks #portfolio as its scroll anchor. It is the element that grows,
-       its top never moves, and nothing is compensated. Excluding it makes the
-       browser anchor to the section below, which covers what the reservation
-       cannot: the error and empty states, a stale card count, and a browser
-       without CSS round(). */
+}
+
+/* With a deep link such as /#contact under the fixed header, the strip the
+   header covers shows this section's bottom padding, so Chromium picks
+   #portfolio as its scroll anchor. It is the element that changes height, its
+   top never moves, and nothing is compensated. Excluding it makes the browser
+   anchor to the section below, which covers what the reservation cannot: the
+   error and empty states, a stale card count, and a browser without CSS
+   round(). Scoped to the placeholder and the status rows on purpose: once the
+   cards render, #portfolio must be an anchor candidate again, or a visitor
+   reading a card is moved whenever anything above the section changes height.
+   A browser without :has() drops this rule and keeps ordinary anchoring. */
+#portfolio:has(.portfolio-loading, .portfolio-status) {
     overflow-anchor: none;
 }
 
@@ -2249,8 +2255,9 @@ keyframes animation
        here meant the cards then pushed everything below them down by the
        whole grid. The renderer replaces this element on every exit path,
        success, empty, and error, so the reservation cannot outlive loading.
-       A browser without round() drops the declaration and falls back to
-       auto. */
+       In a browser without round() the value, which holds var(), is invalid
+       at computed-value time, so min-height falls back to auto; an earlier
+       fallback declaration would not be honored. */
     flex: 0 0 100%;
     min-height: calc(round(up, var(--portfolio-cards) / var(--portfolio-cols), 1) * (var(--portfolio-card-height) + var(--portfolio-row-gap)));
 }
