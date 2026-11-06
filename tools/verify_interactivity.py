@@ -1206,14 +1206,17 @@ def check_no_script_removed_overlay(css, js):
                 )
 
         inline = re.findall(
-            r"<script\b(?![^>]*(?<![-\w])src\s*=)[^>]*>(.*?)</script>",
+            # End tag pattern shared with verify_security.py and
+            # verify_seo_a11y.py: `</script >` and `</script\n>` close a script
+            # too, and a scan that misses them skips the script entirely.
+            r"<script\b(?![^>]*(?<![-\w])src\s*=)[^>]*>(.*?)</script(?=[\s/>])[^>]*>",
             markup, flags=re.S | re.I,
         )
         if any("loader-con" in strip_js_comments(code) for code in inline):
             fail("An inline script in %s still references 'loader-con'. %s" % (page.name, why))
 
         for count, block in enumerate(
-            re.findall(r"<style\b[^>]*>(.*?)</style>", markup, flags=re.S | re.I), 1
+            re.findall(r"<style\b[^>]*>(.*?)</style(?=[\s/>])[^>]*>", markup, flags=re.S | re.I), 1
         ):
             sheets.append((
                 "%s <style> block %d" % (page.name, count),

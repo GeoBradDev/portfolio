@@ -255,6 +255,15 @@ is out of scope.
   every earlier mutation gives its earlier result except N13 to N16, now expected PASS
   as known limits, and the `@import` collapse guard, now expected FAIL for the same
   reason; R1, R2 and R3 FAIL.
+- CI fix, under the same approval: CodeQL on PR #41 raised a high "Bad HTML filtering
+  regexp" alert on the inline script scan, whose end tag `</script>` did not match
+  `</script >`; the `<style>` block scan had the same shape. Both now end on
+  `</script(?=[\s/>])[^>]*>` and `</style(?=[\s/>])[^>]*>`, the end tag pattern
+  `verify_security.py` and `verify_seo_a11y.py` already use. `scratchpad/issue32/mutations5.txt`:
+  the 32 earlier runs give the same results, and two new ones FAIL as they should: a
+  `<script>` naming `loader-con` closed by `</script >` after the last script in
+  `index.html`, and a `<style>` block with a cover closed by `</style >`. Against the
+  previous commit both pass (`mutations5-oldpattern.txt`), which reproduces the alert.
 - AC1: `probe32.py` against the branch with JavaScript disabled at 375x812 and 1440x900:
   every target's `topHit` is true; viewport and full-page screenshots
   `after-nojs-{375,1440}.png` and `after-nojs-{375,1440}-full.png` show hero, about,
