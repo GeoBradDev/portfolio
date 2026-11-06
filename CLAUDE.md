@@ -94,7 +94,7 @@ to one of them needs its symbol added with it. Rules the verifiers hold:
 ### js/main.js
 
 Loaded by `index.html` only; `resume.html` and `privacy.html` are standalone. Vanilla
-JavaScript, no library, since issue #31. It drives the loader fade, the sticky navbar,
+JavaScript, no library, since issue #31. It drives the sticky navbar,
 active-link tracking, the mobile menu toggle, the scroll-to-top button's visibility, the
 skill bars, and making the section an in-page link targets focusable for that click. It
 does not scroll the page or move focus into a section: both are the browser's native
@@ -131,6 +131,15 @@ Invariants that are easy to break by accident:
   `scroll-behavior: smooth` on bare `html`, a deep link's initial jump animates against a
   layout that is still settling and lands short. `check_deep_link_is_not_animated` and
   `check_smooth_scroll_starts_on_load` hold it.
+- Nothing covers the page by default and waits for script to uncover it. `index.html`
+  opened with a fixed, full-viewport `.loader-con` that only this file and the portfolio
+  renderer ever hid, so with JavaScript off the homepage was a blank panel forever, and with
+  it on, parsed content sat under the panel after first paint. Issue #32 deleted it outright:
+  the page is static and its hero image is preloaded, so a loader only delays content. A
+  full-screen element that script opens later, a modal or a menu, must be hidden in its own
+  base rule (`display: none`, `visibility: hidden`, or `opacity: 0` with
+  `pointer-events: none`) and shown by a class. `check_no_script_removed_overlay` holds this
+  on every page; its docstring lists the CSS forms it cannot read.
 
 The hero has no parallax. `.home-1` uses `background-size: cover`, so shifting
 `backgroundPosition` slides the image down and exposes blank space under the
@@ -305,9 +314,9 @@ The invariants issue #19 established. `tools/verify_seo_a11y.py` holds all of th
 
 - **The skip link is the first focusable element in `index.html`,** and targets `#about` rather
   than `#home` because the hero holds nothing to read. It is parked at `top: -100px` and pinned to
-  `top: 12px` on focus, at `z-index: 200` so it clears `.nav-wrapper` at 20 and `.loader-con` at
-  99. It styles `:focus`, not `:focus-visible`: the link is invisible until focused, so there is
-  no mouse-click case to suppress.
+  `top: 12px` on focus, at `z-index: 200` so it clears `.nav-wrapper` at 20. It styles `:focus`,
+  not `:focus-visible`: the link is invisible until focused, so there is no mouse-click case to
+  suppress.
 - **`css/style.css` must never suppress the focus outline unconditionally again.** It set
   `outline: none` on `a, a:focus, a:hover, a:active` plus `.input-field` and `.submit-btn`, which
   left every keyboard user navigating blind. `:focus-visible` now carries the ring. The one
@@ -487,8 +496,9 @@ the text of an `img` tag, and this file reported it as a real image with no `wid
 `img/og-card.jpg` is in `SHIPPED_VARIANTS` but deliberately not in `HOMEPAGE_ASSETS`: no page
 fetches it, only link unfurlers do, so it is not part of the first-paint budget.
 `projects.json` is the opposite case and joined `HOMEPAGE_ASSETS` in issue #20, because the
-renderer fetches it on every load. The homepage totals 339.5 KB against the 1024 KB budget since issue #31 removed jQuery,
-Bootstrap, and Font Awesome; the verifier prints the current figure.
+renderer fetches it on every load. The homepage has sat well under the 1024 KB budget since
+issue #31 removed jQuery, Bootstrap, and Font Awesome. The verifier prints the current figure;
+this file does not pin the total, because every asset change on the homepage moves it.
 
 ### Verifying the security criteria
 

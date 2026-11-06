@@ -28,6 +28,15 @@ fragment navigation moves focus into it, and removes the attribute again;
 and css/style.css suppresses the outline on a focused .one-page-section,
 which is a reading position and not a control.
 
+Issue #32 adds one more: nothing covers the page by default and waits for
+script to uncover it. index.html opened with a full-screen .loader-con that
+only js/main.js and the portfolio renderer ever hid, so with JavaScript off
+the page stayed a blank panel forever, and with it on, parsed content sat
+under the overlay after first paint. The check forbids the loader by name
+and, more generally, any fixed full-viewport rule in css/style.css, or in a
+<style> block or style attribute on any page, that does not hide itself in
+the same block.
+
 Behavior (does the navbar actually go sticky, does the bar actually
 animate, does a nav link land below the header) cannot be checked here.
 Drive that in a browser.
@@ -992,6 +1001,253 @@ def check_scroll_up_transition(css):
         )
 
 
+LOADER_CLASSES = ("loader-con", "double-bounce1", "double-bounce2")
+NUMBER = re.compile(r"^([-+]?(?:\d+\.?\d*|\.\d+))([a-z%]*)$")
+LENGTH_UNITS = ("", "px", "%", "em", "rem", "vw", "vh", "vmin", "vmax",
+                "dvw", "dvh", "svw", "svh", "lvw", "lvh")
+
+
+def number(value):
+    """(float, unit) for a single CSS number such as `100%`, `.0` or `0px`, else None."""
+    match = NUMBER.match((value or "").strip())
+    if not match:
+        return None
+    return float(match.group(1)), match.group(2)
+
+
+def is_zero(value):
+    """True for any spelling of zero: `0`, `0px`, `.0`, `0.00`, `-0%`."""
+    parsed = number(value)
+    return parsed is not None and parsed[0] == 0 and parsed[1] in LENGTH_UNITS
+
+
+def is_full(value, axis):
+    """True when a size spans the viewport on one axis, or more than spans it.
+
+    A percentage is of the viewport for a fixed element, so 100% or more
+    covers. So does 100 or more of the axis's own viewport unit (vw or vh,
+    and their dynamic, small and large forms) and of vmax, which is the
+    larger of the two. vmin is not: it is the smaller side.
+    """
+    parsed = number(value)
+    if parsed is None:
+        return False
+    amount, unit = parsed
+    units = {"%", "vmax"} | ({"vw", "dvw", "svw", "lvw"} if axis == "x" else {"vh", "dvh", "svh", "lvh"})
+    return unit in units and amount >= 100
+
+
+def declarations(body):
+    """The declarations of one block as {property: value}, last one wins.
+
+    Lowercased, with !important dropped, so `position:fixed` and
+    `POSITION: Fixed !important` read alike.
+    """
+    found = {}
+    for part in body.split(";"):
+        if ":" not in part:
+            continue
+        prop, value = part.split(":", 1)
+        value = re.sub(r"!\s*important", "", value).strip().lower()
+        found[prop.strip().lower()] = value
+    return found
+
+
+def offsets(decls):
+    """{side: [values]} for top, right, bottom and left, from every spelling.
+
+    Longhands, the inset shorthand (one to four values, top right bottom
+    left), and the logical inset-block and inset-inline pairs and their
+    start and end longhands, read in horizontal writing mode. A side can
+    collect several values; the caller treats it as zero if any of them is,
+    which errs toward reporting a cover.
+    """
+    sides = {"top": [], "right": [], "bottom": [], "left": []}
+    for side in sides:
+        if side in decls:
+            sides[side].append(decls[side])
+    tokens = decls.get("inset", "").split()
+    if tokens:
+        # The CSS fill rule: right defaults to top, bottom to top, left to
+        # right.
+        top = tokens[0]
+        right = tokens[1] if len(tokens) > 1 else top
+        bottom = tokens[2] if len(tokens) > 2 else top
+        left = tokens[3] if len(tokens) > 3 else right
+        for side, value in zip(("top", "right", "bottom", "left"), (top, right, bottom, left)):
+            sides[side].append(value)
+    for prop, start, finish in (("inset-block", "top", "bottom"), ("inset-inline", "left", "right")):
+        pair = decls.get(prop, "").split()
+        if pair:
+            sides[start].append(pair[0])
+            sides[finish].append(pair[1] if len(pair) > 1 else pair[0])
+        if prop + "-start" in decls:
+            sides[start].append(decls[prop + "-start"])
+        if prop + "-end" in decls:
+            sides[finish].append(decls[prop + "-end"])
+    return sides
+
+
+def covers_viewport(decls):
+    """True when one block pins an element over the whole viewport.
+
+    Fixed, and spanning it both ways. Across: a width, min-width,
+    inline-size or min-inline-size that is full (see is_full), or zero
+    offsets on both the left and the right. Down: a height, min-height,
+    block-size or min-block-size that is full, or zero offsets top and
+    bottom. Logical sizes are read in horizontal writing mode only: under
+    writing-mode: vertical-* inline-size is the height, and that is not
+    understood. Offsets come from the longhands, inset, inset-block and
+    inset-inline (see offsets).
+
+    A block that hides the element in the same breath is a closed modal or
+    menu, not a cover, and passes: display: none, or visibility: hidden or
+    collapse. opacity: 0 alone does not count. A transparent element is
+    still hit-testable and swallows every click under it, so it passes
+    only together with pointer-events: none.
+
+    Known limit: values are read literally, so a size or offset written
+    with calc(), min(), max(), clamp() or var() is not understood and does
+    not count toward coverage.
+    """
+    if decls.get("position") != "fixed":
+        return False
+    if decls.get("display") == "none" or decls.get("visibility") in ("hidden", "collapse"):
+        return False
+    if is_zero(decls.get("opacity", "1")) and decls.get("pointer-events") == "none":
+        return False
+
+    sides = offsets(decls)
+
+    def zero(side):
+        return any(is_zero(value) for value in sides[side])
+
+    across = (
+        any(is_full(decls.get(prop), "x")
+            for prop in ("width", "min-width", "inline-size", "min-inline-size"))
+        or (zero("left") and zero("right"))
+    )
+    down = (
+        any(is_full(decls.get(prop), "y")
+            for prop in ("height", "min-height", "block-size", "min-block-size"))
+        or (zero("top") and zero("bottom"))
+    )
+    return across and down
+
+
+def html_attribute(name, markup):
+    """Every value of attribute `name` in markup: double, single or unquoted.
+
+    The lookbehind keeps `data-class=` from reading as `class=`.
+    """
+    pattern = r"""(?<![-\w])%s\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""" % name
+    return [a or b or c for a, b, c in re.findall(pattern, markup, flags=re.I)]
+
+
+def check_no_script_removed_overlay(css, js):
+    """Nothing covers the page by default and waits for script to uncover it.
+
+    Issue 32. index.html opened with <div class="loader-con">, a fixed,
+    full-viewport, near-white panel at z-index 99, and the only two things
+    that ever hid it were hideLoader() in js/main.js and the portfolio
+    renderer's finally block. With JavaScript off the homepage was a blank
+    page with a grey dot, permanently; with it on, content that had already
+    parsed sat under the panel after first paint.
+
+    Two parts, over css/style.css, js/main.js, and every page at the repo
+    root (HTML_PAGES, the same glob the other verifiers use): its markup,
+    its style attributes, its <style> blocks and its inline scripts.
+
+    The narrow one forbids the loader by name: no element carries one of
+    its class tokens, no selector in css/style.css or a <style> block names
+    it, no @keyframes sk-bounce survives, and no script mentions
+    loader-con. So it cannot come back piecemeal.
+
+    The general one reads every rule in css/style.css and in each <style>
+    block (inside @media and @supports too) and every style attribute, and
+    fails any block that fixes an element over the whole viewport without
+    hiding it in the same block (see covers_viewport). A full-screen element
+    script opens later, a modal or a menu, has to be hidden in its own base
+    rule and shown by a class.
+
+    Known limits: an overlay built entirely by script, one whose coverage is
+    split across several rules, one sized with calc() or another CSS
+    function, one written as a nested CSS rule inside another style rule
+    (`.p { .o { position: fixed; inset: 0 } }`, which css_rules does not
+    descend into), and one in the rule directly after a statement at-rule
+    (`@import ...;`, `@charset ...;`, `@layer a, b;`) are not caught.
+    css_rules, shared with the nav checks, reads that statement as the start
+    of the next rule's prelude and drops the rule; splitting on the
+    semicolon was tried and reverted, because it also split a `;` inside
+    url(data:...;base64,...) or a quoted attribute selector and weakened
+    the nav checks. Logical sizes are read in horizontal writing mode only.
+    Drive that in a browser.
+    """
+    why = (
+        "With JavaScript off nothing ever removes it, so the page stays "
+        "covered (issue 32)."
+    )
+    sheets = [("css/style.css", re.sub(r"/\*.*?\*/", "", css, flags=re.S))]
+
+    if "loader-con" in strip_js_comments(js):
+        fail("js/main.js still references 'loader-con'. %s" % why)
+
+    for page in HTML_PAGES:
+        markup = re.sub(r"<!--.*?-->", "", page.read_text(encoding="utf-8"), flags=re.S)
+
+        tokens = set()
+        for value in html_attribute("class", markup):
+            tokens.update(value.split())
+        for name in LOADER_CLASSES:
+            if name in tokens:
+                fail(
+                    "%s has an element with class %r, the full-screen "
+                    "loader. %s" % (page.name, name, why)
+                )
+
+        inline = re.findall(
+            # End tag pattern shared with verify_security.py and
+            # verify_seo_a11y.py: `</script >` and `</script\n>` close a script
+            # too, and a scan that misses them skips the script entirely.
+            r"<script\b(?![^>]*(?<![-\w])src\s*=)[^>]*>(.*?)</script(?=[\s/>])[^>]*>",
+            markup, flags=re.S | re.I,
+        )
+        if any("loader-con" in strip_js_comments(code) for code in inline):
+            fail("An inline script in %s still references 'loader-con'. %s" % (page.name, why))
+
+        for count, block in enumerate(
+            re.findall(r"<style\b[^>]*>(.*?)</style(?=[\s/>])[^>]*>", markup, flags=re.S | re.I), 1
+        ):
+            sheets.append((
+                "%s <style> block %d" % (page.name, count),
+                re.sub(r"/\*.*?\*/", "", block, flags=re.S),
+            ))
+
+        for style in html_attribute("style", markup):
+            # Comments are legal inside a style attribute and would
+            # otherwise glue themselves onto the next property name.
+            if covers_viewport(declarations(re.sub(r"/\*.*?\*/", "", style, flags=re.S))):
+                fail(
+                    "%s: an element with style=%r is position: fixed over "
+                    "the whole viewport. %s" % (page.name, style, why)
+                )
+
+    for source, css_code in sheets:
+        if re.search(r"@(?:-\w+-)?keyframes\s+sk-bounce\b", css_code):
+            fail("%s still declares @keyframes sk-bounce, the loader's animation." % source)
+        for media, selector, body in css_rules(css_code):
+            if re.search(r"\.loader-con\b|\.double-bounce", selector):
+                fail("%s still styles %r, the loader. %s" % (source, selector.strip(), why))
+            if covers_viewport(declarations(body)):
+                where = (" inside %s" % " ".join(media)) if media else ""
+                fail(
+                    "%s: %r%s is position: fixed over the whole viewport and "
+                    "does not hide itself in the same rule. %s Hide it in its "
+                    "base rule and show it from a class script adds."
+                    % (source, selector.strip(), where, why)
+                )
+
+
 def check_no_dead_code(facts, js):
     """Nothing in main.js may target an element or library the page lacks."""
     banned = [
@@ -1058,6 +1314,7 @@ def main():
     check_progress_bars(facts)
     check_card_handler(html, css)
     check_scroll_up_transition(css)
+    check_no_script_removed_overlay(css, js)
     check_no_dead_code(facts, js)
     check_syntax()
 

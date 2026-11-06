@@ -72,48 +72,11 @@
             return element.getBoundingClientRect().top + window.pageYOffset;
         }
 
-/*------------------------------------------------
-  Preloader
---------------------------------------------------*/
-
-        // Fades over 600ms, the "slow" the old fadeOut call used, then
-        // leaves the layout. transitionend does not fire if the fade never runs, for
-        // instance because the portfolio renderer already hid the loader, so
-        // a timeout finishes the job either way and the page can never stay
-        // covered.
-        function hideLoader() {
-            var loader = document.querySelector(".loader-con"),
-                done = false;
-
-            if (!loader) {
-                return;
-            }
-
-            function finish() {
-                if (done) {
-                    return;
-                }
-                done = true;
-                loader.style.display = "none";
-            }
-
-            loader.addEventListener("transitionend", function (event) {
-                if (event.target === loader) {
-                    finish();
-                }
-            });
-            window.setTimeout(finish, 700);
-            loader.style.transition = "opacity 600ms ease-in-out";
-            void loader.offsetWidth;
-            loader.style.opacity = "0";
-        }
-
         // Smooth scrolling starts here, a frame after load, and not from
         // the first paint: see html.smooth-scroll in css/style.css. Until
         // then a deep link's jump is instant and lands against the final
         // layout.
         function onLoad() {
-            hideLoader();
             window.requestAnimationFrame(function () {
                 document.documentElement.classList.add("smooth-scroll");
             });

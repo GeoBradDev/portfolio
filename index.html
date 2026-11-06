@@ -117,15 +117,6 @@
      read, only the headline and the chevron. -->
 <a class="skip-link" href="#about">Skip to content</a>
 
-<!-- Loader -->
-<div class="loader-con">
-    <div class="spinner center">
-        <div class="double-bounce1"></div>
-        <div class="double-bounce2"></div>
-    </div>
-</div>
-<!-- End Loader -->
-
 <!-- Icon sprite. Every icon on this page, and every icon the portfolio
      renderer below creates, is a <use> of one of these symbols. The outlines
      are Font Awesome 4.7.0 by Dave Gandy, font under the SIL OFL 1.1,
@@ -770,9 +761,6 @@
             console.error("Error loading portfolio:", error.message);
             portfolioContainer.innerHTML = `<div class="portfolio-status text-center"><p class="portfolio-error"></p></div>`;
             portfolioContainer.querySelector('p').textContent = `Couldn't load projects. ${error.message}`;
-        } finally {
-            const loader = document.querySelector('.loader-con');
-            if (loader) loader.style.display = 'none';
         }
     }
 
