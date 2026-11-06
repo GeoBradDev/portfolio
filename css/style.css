@@ -2200,11 +2200,14 @@ keyframes animation
    #portfolio as its scroll anchor. It is the element that changes height, its
    top never moves, and nothing is compensated. Excluding it makes the browser
    anchor to the section below, which covers what the reservation cannot: the
-   error and empty states, a stale card count, and a browser without CSS
-   round(). Scoped to the placeholder and the status rows on purpose: once the
-   cards render, #portfolio must be an anchor candidate again, or a visitor
-   reading a card is moved whenever anything above the section changes height.
-   A browser without :has() drops this rule and keeps ordinary anchoring. */
+   error and empty states, where the status row keeps the exclusion on while
+   the reservation collapses. It does not cover a stale card count or a
+   browser without round(): on success the exclusion lifts in the same frame
+   the cards replace the placeholder, so nothing compensates there. Scoped on
+   purpose: once the cards render, #portfolio must be an anchor candidate
+   again, or a visitor reading a card is moved whenever anything above the
+   section changes height. A browser without :has() drops this rule and keeps
+   ordinary anchoring. */
 #portfolio:has(.portfolio-loading, .portfolio-status) {
     overflow-anchor: none;
 }

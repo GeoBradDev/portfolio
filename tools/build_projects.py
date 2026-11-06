@@ -186,23 +186,23 @@ def stylesheet_card_count_warning(count, css_text):
     comment counts as missing, which is what the browser sees too.
     """
     css = re.sub(r"/\*.*?\*/", "", css_text, flags=re.S)
-    found = [value.strip() for value in CARD_COUNT.findall(css)]
+    # A trailing !important changes nothing the browser or the gate reads.
+    found = [re.sub(r"\s*!\s*important\s*$", "", value.strip(), flags=re.I)
+             for value in CARD_COUNT.findall(css)]
     if not found:
         return ("css/style.css declares no --portfolio-cards; add "
                 "--portfolio-cards: %d to #github-projects, or the loading "
-                "placeholder collapses and, in a browser without scroll "
-                "anchoring (Safari), deep links below the portfolio land off "
-                "by the whole grid" % count)
+                "placeholder collapses and deep links below the portfolio land "
+                "off by the whole grid" % count)
     if len(found) > 1:
         return ("css/style.css declares --portfolio-cards %d times; keep the one "
                 "on #github-projects as --portfolio-cards: %d" % (len(found), count))
     # Compared as integers, like the gate and the browser: 07 is 7.
     if not re.fullmatch(r"\d+", found[0]) or int(found[0]) != count:
         return ("css/style.css declares --portfolio-cards: %s but projects.json "
-                "now has %d cards; change it to --portfolio-cards: %d, or, in a "
-                "browser without scroll anchoring (Safari), deep links below "
-                "the portfolio land off by the change in rows"
-                % (found[0], count, count))
+                "now has %d cards; change it to --portfolio-cards: %d, or deep "
+                "links below the portfolio land off by the change in rows in "
+                "every browser" % (found[0], count, count))
     return None
 
 
