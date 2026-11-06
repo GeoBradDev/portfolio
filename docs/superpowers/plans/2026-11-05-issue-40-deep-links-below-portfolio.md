@@ -138,7 +138,12 @@ Added by this plan, from the orchestrator's constraints:
   1. `--portfolio-cards: N` is declared exactly once, as an integer, and N equals
      `len(projects.json["projects"])` (reuse `load_projects`). The message names both numbers and
      says to update the stylesheet after regenerating.
-  2. The `.portfolio-loading` rule's `min-height` references all four variables.
+  2. The top-level `.portfolio-loading` rule's `min-height` is exactly the reservation formula
+     with whitespace removed, and no other rule sizes `.portfolio-loading` (its `::after`
+     spinner excluded). The other three variables are declared on the top-level
+     `#github-projects` rule. (Departure: pinned exactly rather than "references all four
+     variables", because a formula that names all four and multiplies where it should divide
+     passes the looser test.)
   3. No rule whose selector is `.portfolio-card` declares a `height` other than
      `var(--portfolio-card-height)`, and no rule whose selector is `.portfolio-item` declares
      `flex` or `max-width` without `var(--portfolio-cols)` or a `padding` without
@@ -150,9 +155,13 @@ Added by this plan, from the orchestrator's constraints:
   6. The generator warns: call `build_projects.stylesheet_card_count_warning` (via the existing
      `import_generator`) with a matching count and stylesheet text and assert `None`; with a
      mismatched count and assert a string naming `--portfolio-cards: <new count>` and
-     `css/style.css`; with no declaration and assert a warning. Then assert `main()` actually
-     calls it: scan `main`'s source via `inspect.getsource` for the function's name, since the
-     injected-data calls alone cannot prove the wiring.
+     `css/style.css`; with no declaration, a commented-out one, or two, and assert a warning.
+     Then prove `main()` is wired to it by running the real `main()` offline: swap
+     `fetch_repos`, `probe`, `OUTPUT`, and a new `STYLESHEET` module constant for temporary
+     stand-ins, assert the WARN appears on stderr when the stylesheet's count differs from the
+     one card written and not when it matches, and assert the stylesheet is byte-identical
+     afterward. (Departure: a source scan for the name would pass on a call whose result is
+     discarded or a name in a comment; running `main()` cannot.)
   Each failure message says what the visitor sees when it breaks. The docstring states the limits:
   it does not compute a height, does not know the column breakpoints are the right ones, and the
   browser drive is the proof that the reservation matches the render.
@@ -162,7 +171,7 @@ Added by this plan, from the orchestrator's constraints:
   `WARN  css/style.css declares --portfolio-cards: 7 but projects.json now has 8 cards; change it to --portfolio-cards: 8 or deep links below the portfolio land a row off`.
   A stylesheet with no declaration, or more than one, also returns a warning that says so.
   `main()` calls it after writing `projects.json`, with the count it wrote and the text of
-  `css/style.css`, and prints any warning to stderr like the other WARN lines. It never writes
+  `STYLESHEET` (a module constant naming `css/style.css`, so the gate can point it elsewhere), and prints any warning to stderr like the other WARN lines. It never writes
   the stylesheet. Standard library only, like the rest of the script.
 - `CLAUDE.md`: in "Portfolio Loading", one paragraph on the reservation and the anchor exclusion
   and why each exists; in "Updating Portfolio Content", a step: when the number of cards changes,
