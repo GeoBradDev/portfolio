@@ -183,6 +183,16 @@ Added by this plan:
 - `tools/make_og_card.py`: `SCRIM`, the subtitle fill, docstring "rgba(0, 0, 0, 0.4)".
 - `img/og-card.jpg`: regenerated.
 - `tools/optimize_images.py`: comment "40 percent black scrim" to 50 (comment only).
+
+Departure, made while implementing: every comment and doc sentence that named the scrim's
+alpha ("40 percent scrim", `rgba(0, 0, 0, 0.4)`) and the share card's size ("175.0 KB") now
+states the rule without the figure ("the scrim from `.home-1:after`", "the script's `SCRIM`
+must equal the alpha in that rule"), instead of swapping 40 for 50 and 175.0 for 161.4. The
+verifier pins the numbers, so prose that repeats them can only go stale. This applies to the
+`@supports` comment in `css/style.css`, the `check_focus_ring_contrast` docstring, the
+`make_og_card.py` docstring, the `optimize_images.py` comment, and both CLAUDE.md passages.
+The credit and credit link lines in `check_hero_text_contrast()` extend the house format with
+"and the backing" in the parenthetical, since their surface has two layers.
 - `CLAUDE.md`: the Responsive Hero Background paragraph's "40 percent scrim", the share
   card section's `rgba(0, 0, 0, 0.4)` and "175.0 KB", the Accessibility section (one bullet
   on hero text contrast and why it is computed against white under the scrim), and the

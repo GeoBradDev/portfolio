@@ -339,6 +339,17 @@ The invariants issue #19 established. `tools/verify_seo_a11y.py` holds all of th
   and `focusable="false"`.** The
   two Bluesky links get neither: their `<img alt="Bluesky">` already names them, and a label would
   win over the alt and leave it dead.
+- **Hero text is measured against a white photo pixel under the scrim.** The photo cannot be
+  read from source and no automated audit measures text over an image, so
+  `check_hero_text_contrast` takes the brightest pixel any photo can hold, composites the
+  `.home-1:after` scrim over it (and, for the photo credit, the credit's own black backing), and
+  holds the subtitle to the 3:1 large-text bar and the credit and its link to 4.5:1. That worst
+  case is real, not theoretical: the subtitle crosses sun glints on the water that are
+  effectively pure white. Lightening the scrim, dimming the subtitle, or dropping the credit's
+  backing fails the gate. Only flat black `rgba()` layers can be bounded this way; a gradient or
+  image scrim fails the parse and forces the check to be rewritten with it. The credit link is
+  underlined because it shares the credit's color, so the underline is what tells it apart
+  (SC 1.4.1).
 - The contact items use `h3`/`h4`, not `h5`/`h6`. They sit under an `<h2>Contact</h2>`, so the old
   tags skipped two levels and failed Lighthouse's `heading-order`. The CSS pins 13px and 16px so
   the promotion changed no rendered size.
@@ -397,7 +408,7 @@ Two rules for editing this:
 - **Never declare a WebP URL outside the `@supports` block**, and do not reach for
   `-webkit-image-set()`. The prefixed form cannot express a format fallback, so
   Safari 6 to 13, which support the prefixed function but not WebP, resolve it to a
-  file they cannot decode and paint no hero at all, only the 40 percent scrim from
+  file they cannot decode and paint no hero at all, only the scrim from
   `.home-1:after`. Safari 14 to 16 also land on the JPEG under this structure. That
   is the accepted cost of never handing any browser an undecodable file.
 - The JPEG stays a plain `url()` in the base rule, so it is the universal floor.
@@ -614,10 +625,12 @@ points at it with absolute Open Graph URLs; the homepage carries `Person` struct
 every `sameAs` profile the page also links; every image has alt text that is not its own filename;
 every link and button has an accessible name and every decorative icon is `aria-hidden`; every
 `target="_blank"` states a `rel`; every contact control has a label and the five FormSubmit field
-names are intact; the skip link is the first focusable element and the focus ring is visible; and
-card text and focus rings clear their WCAG thresholds. Standard library only. Run it after
-touching any page's `<head>`, a link or icon, the contact form, the focus or skip-link CSS, or a
-card color.
+names are intact; the skip link is the first focusable element and the focus ring is visible;
+card text and focus rings clear their WCAG thresholds; and the hero subtitle and photo credit clear
+theirs against a white photo pixel under the scrim, with the credit link underlined and the share
+card's scrim matching the hero's. Standard library only. Run it after
+touching any page's `<head>`, a link or icon, the contact form, the focus or skip-link CSS, a
+card color, or the hero scrim or hero text colors.
 
 Things about it worth knowing before editing:
 
@@ -630,7 +643,8 @@ Things about it worth knowing before editing:
 - **Contrast is computed, not asserted.** Both checks read the colors out of the file and
   calculate the ratio, so changing a color rechecks it rather than replaying a stored number.
   Text is held to 4.5:1 and focus rings to the 3:1 that WCAG 2.2 SC 1.4.11 puts on non-text.
-  Both read `css/style.css`. The card colors used to be read out of `index.html`, where the
+  Both read `css/style.css`. The hero text check is computed the same way, against a surface
+  composited from the declared layers over white rather than a color any one rule states. The card colors used to be read out of `index.html`, where the
   card CSS lived as a string in JavaScript; issue #20 moved the CSS and this with it.
   `.portfolio-error` joined the list then, and declares its own `background` for a reason:
   `#portfolio` paints a gradient, and a ratio can only be computed against a color the rule
@@ -716,14 +730,14 @@ python3 tools/make_og_card.py
 ```
 
 Rebuilds `img/og-card.jpg` from `img/hero-1280.jpg`: a cover-crop to the 1.91:1 every unfurler
-expects, under the same `rgba(0, 0, 0, 0.4)` scrim `.home-1:after` paints over the hero, with the
-hero's own two lines of copy over it. A shared link then previews as the top of the site instead
+expects, under the same scrim `.home-1:after` paints over the hero, with the hero's own two lines
+of copy over it in the hero's own colors. The script's `SCRIM` must equal the alpha in that rule,
+and `verify_seo_a11y.py` fails when they differ, so a scrim change means regenerating the card. A shared link then previews as the top of the site instead
 of drifting away from it. Requires Pillow, run by hand, never part of the gate.
 
 It is a JPEG even though issue #19 asked for a PNG. The card is a photograph: lossless PNG at
 1200x630 lands near a megabyte, five times the 200 KB budget the same issue sets, and quantizing
-to fit bands the sky and the water. Every unfurler accepts JPEG. It ships at 175.0 KB, and
-`verify_seo_a11y.py` asserts the dimensions and the budget, so any replacement has to hold both.
+to fit bands the sky and the water. Every unfurler accepts JPEG. `verify_seo_a11y.py` asserts the dimensions and the budget, so any replacement has to hold both.
 The page sets Lato, which is fetched from Google Fonts and is not on disk, so the script falls
 back through Open Sans, Liberation Sans, and DejaVu Sans; the card is generated once and
 committed, so that chain only has to resolve on whichever machine regenerates it.

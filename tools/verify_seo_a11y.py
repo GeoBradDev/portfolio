@@ -1528,9 +1528,12 @@ def check_focus_ring_contrast():
     past 100px, which is exactly when a visitor is most likely to be tabbing
     through it. Both rings were invisible.
 
-    The hero is deliberately absent. Its surface is a photograph under a 40
-    percent scrim, so there is no single background color to measure, and the
-    white ring there is a judgment call rather than a computation.
+    The hero is deliberately absent. Its surface is a photograph under a
+    scrim, so there is no single background color to measure, and the white
+    ring there is a judgment call rather than a computation.
+    check_hero_text_contrast bounds the hero's text against the worst case,
+    a white photo pixel, but a ring is not text and that bound is not applied
+    to it here.
     """
     print("\nEvery focus ring contrasts with the surface it lands on")
 

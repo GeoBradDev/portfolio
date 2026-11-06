@@ -22,7 +22,7 @@ import sys
 from PIL import Image
 
 # WebP quality 62 keeps the 1280 hero at roughly 200 KB, comfortably inside the
-# 300 KB budget. The hero sits behind a 40 percent black scrim (.home-1:after),
+# 300 KB budget. The hero sits behind a black scrim (.home-1:after),
 # so compression artifacts that would show on a bare photo are not visible here.
 HERO_QUALITY = 62
 HERO_WIDTHS = (1280, 1920, 2560)

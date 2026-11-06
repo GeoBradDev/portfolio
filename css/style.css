@@ -759,7 +759,7 @@ Home
    The prefixed -webkit-image-set() form is deliberately not used. It cannot express
    a format fallback, so Safari 6 to 13, which support the prefixed function but not
    WebP, would resolve it to a file they cannot decode and paint no hero at all,
-   only the 50 percent scrim from .home-1:after. Serving those browsers a slightly
+   only the scrim from .home-1:after. Serving those browsers a slightly
    soft 1280 JPEG is the better failure.
 
    Variants are keyed to viewport width, not device pixel ratio. A 3x phone is still
