@@ -10,10 +10,13 @@ by hand to regenerate a committed asset. Neither is part of the gate, and
 neither runs on the deployed site.
 
 The card is the hero photo the homepage already serves, cropped to the 1.91:1
-that every unfurler expects, under the same rgba(0, 0, 0, 0.4) scrim that
-css/style.css paints over the hero in .home-1:after, with the same two lines
-of copy the hero carries. A shared link then previews as the top of the site
-rather than as something assembled separately that can drift away from it.
+that every unfurler expects, under the same black scrim that css/style.css
+paints over the hero in .home-1:after, with the same two lines of copy the
+hero carries in the same colors. SCRIM below must equal that rule's alpha,
+and the two text fills must equal the colors #home h1 and #home .typer-title
+declare; tools/verify_seo_a11y.py fails when either drifts. A shared link
+then previews as the top of the site rather than as something assembled
+separately that can drift away from it.
 
 JPEG, not PNG. Issue 19 asked for a PNG, but this is a photograph: PNG is
 lossless and would land near a megabyte at this size, five times the 200 KB
@@ -33,7 +36,7 @@ SOURCE = ROOT / "img" / "hero-1280.jpg"
 TARGET = ROOT / "img" / "og-card.jpg"
 
 WIDTH, HEIGHT = 1200, 630
-SCRIM = 0.4
+SCRIM = 0.5
 BUDGET = 200 * 1024
 
 # The page sets Lato, which is fetched from Google Fonts and is not on disk
@@ -99,7 +102,7 @@ def main():
 
     lines = [
         ("Brad Stricherz", name_font, (255, 255, 255), 236),
-        ("Senior Geospatial Software Engineer", role_font, (233, 233, 233), 350),
+        ("Senior Geospatial Software Engineer", role_font, (242, 242, 242), 350),
         ("GEOBRAD.DEV", host_font, (255, 255, 255), 430),
     ]
     for text, font, fill, top in lines:
