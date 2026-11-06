@@ -2198,7 +2198,7 @@ def hero_declarations(rules, chain, pseudo_element=None):
     """Every declaration that can apply to the chain's last element, by group.
 
     Returns {group: [(precedence, conditional, value, where, prop)]} plus a
-    list of rules that declare one group twice.
+    list of (group, message) for rules that declare one group twice.
     """
     found = {}
     doubled = []
@@ -2225,7 +2225,7 @@ def hero_declarations(rules, chain, pseudo_element=None):
                     continue
                 if group in seen:
                     doubled.append(
-                        "%s declares %s and %s in one rule" % (where, seen[group], prop)
+                        (group, "%s declares %s and %s in one rule" % (where, seen[group], prop))
                     )
                 seen[group] = prop
                 precedence = (important, specificity(selector), order)
@@ -2273,7 +2273,7 @@ def weight_value(value):
 
 
 def check_hero_text_cannot_be_overridden():
-    """No other rule can change what check_hero_text_contrast measured.
+    """No rule in css/style.css can change what check_hero_text_contrast read.
 
     That check reads one rule per target and trusts it. Review of issue 34
     found nine ways the rendered hero could differ while it passed: an
@@ -2285,24 +2285,38 @@ def check_hero_text_cannot_be_overridden():
 
     For each hero target (the scrim pseudo-element, the subtitle, the credit,
     its paragraph, and its link) it takes the element's real ancestor chain
-    from index.html, finds every rule at any @media depth whose selector can
-    match it, and orders their declarations by !important, specificity, and
-    source order. A declaration can win unless an unconditional one outranks
-    it; one inside any at-rule (@media, @supports) or behind a state or
-    structural pseudo-class such as :hover is conditional, so it may win but
-    never shadows. Rules inside @keyframes are not element rules and are
-    skipped. Every declaration that can
-    win must be compatible: black rgba scrims and backings no lighter than the
-    lightest measured, text colors measured against the worst surface at the
-    target's threshold, a subtitle at weight 700 or more and 18.66px or more,
-    an underline on every link rule, and no opacity or text fill anywhere on
-    the chain. One rule declaring a property group twice fails outright.
+    from index.html, finds every rule in css/style.css at any at-rule depth
+    whose selector can match it, and orders their declarations by !important,
+    specificity, and source order. A declaration can win unless an
+    unconditional one outranks it; one inside any at-rule (@media, @supports)
+    or behind a state or structural pseudo-class such as :hover is
+    conditional, so it may win but never shadows. Rules inside @keyframes are
+    not element rules and are skipped. Every declaration that can win must be
+    compatible: black rgba scrims and backings no lighter than the lightest
+    measured, an unconditional content on the scrim, text colors measured
+    against the worst surface at the target's threshold, a subtitle at weight
+    700 or more and 18.66px or more in px, an underline on every link rule,
+    no layer between the section and the text other than black rgba,
+    transparent, or none, and no opacity or text fill anywhere on the chain.
+    A rule declaring one property group twice on a target element fails
+    outright, for the groups that target is measured on; the same on an
+    ancestor is an ordinary fallback and passes.
 
-    This is a heuristic matcher, not a cascade resolver. It follows
-    descendant and child combinators against the real ancestors, assumes a
-    sibling combinator and every pseudo-class can match, and reads only the
-    properties above: `all`, `filter`, `mix-blend-mode`, a non-black layer
-    over the photo, and CSS custom properties are not examined.
+    This is a heuristic matcher, not a cascade resolver. Its limits:
+
+    - It reads css/style.css only. Inline style attributes and <style>
+      blocks in index.html are not read.
+    - It checks the target elements and their ancestors, not descendants. An
+      element inside the subtitle or the link with its own color is
+      unchecked.
+    - It follows descendant and child combinators against the real
+      ancestors and assumes a sibling combinator and every pseudo-class can
+      match.
+    - ::first-line and ::first-letter rules are ranked by specificity like
+      any other, although in a browser they win over the element's own
+      rules outright.
+    - It reads only the properties above. `all`, `filter`,
+      `mix-blend-mode`, and CSS custom properties are not examined.
     """
     print("\nNo other rule can change the hero text's measured contrast")
 
@@ -2321,18 +2335,41 @@ def check_hero_text_cannot_be_overridden():
 
     problems = []
 
-    def collect(chain, pseudo_element=None):
+    # The property groups each target is measured on. A rule declaring one of
+    # these twice on a target fails; a duplicate on an ancestor, or in a group
+    # the target is not measured on, is an ordinary fallback and is left alone.
+    measured = {
+        "scrim": {"background", "content", "display", "opacity", "text-fill"},
+        "subtitle": {
+            "color", "background", "font-weight", "font-size", "font", "opacity", "text-fill",
+        },
+        "credit": {"color", "background", "opacity", "text-fill"},
+        "credit p": {"color", "background", "opacity", "text-fill"},
+        "credit link": {"color", "background", "text-decoration", "opacity", "text-fill"},
+    }
+
+    def collect(chain, pseudo_element=None, target=None):
         found, doubled = hero_declarations(rules, chain, pseudo_element)
-        problems.extend(doubled)
+        if target is not None:
+            problems.extend(
+                message for group, message in doubled if group in measured[target]
+            )
         return {group: can_win(entries) for group, entries in found.items()}
 
     def black_layer(group_state, label, required):
-        """(minimum alpha over every live black-rgba layer, its rule), or Nones."""
+        """(minimum alpha over every live black-rgba layer, its rule), or Nones.
+
+        `required` is for the scrim and the credit's backing, which must be
+        black rgba. Any other layer only has to be no lighter than nothing,
+        so `transparent` and `none` pass there.
+        """
         live, winner = group_state.get("background", ([], None))
         if required and winner is None:
             problems.append("%s has no unconditional background" % label)
         alphas = []
         for _, _, value, where, prop in live:
+            if not required and value.strip().lower() in ("transparent", "none"):
+                continue
             alpha = black_alpha(value)
             if alpha is None or not 0 <= alpha <= 1:
                 problems.append(
@@ -2359,8 +2396,15 @@ def check_hero_text_cannot_be_overridden():
                     )
 
     # The scrim.
-    scrim_state = collect(chains["section"], "after")
+    scrim_state = collect(chains["section"], "after", "scrim")
     scrim, scrim_rule = black_layer(scrim_state, "the hero scrim", True)
+    # A pseudo-element with no content is never generated, so the scrim is
+    # only drawn when an unconditional rule gives it one.
+    content_winner = scrim_state.get("content", ([], None))[1]
+    if content_winner is None or content_winner[2].strip().lower() in ("none", "normal"):
+        problems.append(
+            "the hero scrim has no unconditional content declaration, so it is never drawn"
+        )
     for group in ("content", "display"):
         for _, _, value, where, prop in scrim_state.get(group, ([], None))[0]:
             if value.strip().lower() in ("none", "normal"):
@@ -2401,7 +2445,7 @@ def check_hero_text_cannot_be_overridden():
 
     # The subtitle.
     subtitle_chain = chains["subtitle"]
-    subtitle = collect(subtitle_chain)
+    subtitle = collect(subtitle_chain, target="subtitle")
     colors(subtitle, "hero subtitle", under_scrim, HERO_LARGE_TEXT_MINIMUM, False, scrim_layer)
     no_light_layers(subtitle_chain, "the hero subtitle")
     no_fade("hero subtitle", subtitle_chain)
@@ -2425,14 +2469,19 @@ def check_hero_text_cannot_be_overridden():
         problems.append("the hero subtitle has no unconditional font-size of its own")
     for _, _, value, where, prop in live:
         size = px_value(value)
-        if size is None or size < LARGE_TEXT_BOLD_PX:
+        if size is None:
+            problems.append(
+                "%s sets font-size: %s on the hero subtitle, which is not a px value this "
+                "check can read; use px or extend the check" % (where, value)
+            )
+        elif size < LARGE_TEXT_BOLD_PX:
             problems.append(
                 "%s sets font-size: %s on the hero subtitle, under the %.2fpx its 3:1 bar needs"
                 % (where, value, LARGE_TEXT_BOLD_PX)
             )
 
     # The credit, its paragraph, and its link.
-    credit = collect(chains["credit"])
+    credit = collect(chains["credit"], target="credit")
     backing, backing_rule = black_layer(credit, "the photo credit", True)
     credit_surface = over("#000000", backing or 0, under_scrim)
     credit_layers = scrim_layer + (
@@ -2443,7 +2492,7 @@ def check_hero_text_cannot_be_overridden():
         ("credit p", "photo credit paragraph"),
         ("credit link", "photo credit link"),
     ):
-        state = collect(chains[key])
+        state = collect(chains[key], target=key)
         colors(state, label, credit_surface, CONTRAST_MINIMUM, True, credit_layers)
     no_light_layers(chains["credit link"], "the photo credit")
     no_fade("photo credit", chains["credit link"])
