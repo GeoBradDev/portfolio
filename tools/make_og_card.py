@@ -13,8 +13,10 @@ The card is the hero photo the homepage already serves, cropped to the 1.91:1
 that every unfurler expects, under the same black scrim that css/style.css
 paints over the hero in .home-1:after, with the same two lines of copy the
 hero carries in the same colors. SCRIM below must equal that rule's alpha,
-and tools/verify_seo_a11y.py fails when the two differ. A shared link then previews as the top of the site
-rather than as something assembled separately that can drift away from it.
+and the two text fills must equal the colors #home h1 and #home .typer-title
+declare; tools/verify_seo_a11y.py fails when either drifts. A shared link
+then previews as the top of the site rather than as something assembled
+separately that can drift away from it.
 
 JPEG, not PNG. Issue 19 asked for a PNG, but this is a photograph: PNG is
 lossless and would land near a megabyte at this size, five times the 200 KB

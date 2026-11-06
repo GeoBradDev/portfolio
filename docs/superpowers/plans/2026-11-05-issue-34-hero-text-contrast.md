@@ -141,7 +141,7 @@ worst case is provable from the CSS alone.
 
 | Text | Viewports | Need | Glyph min, WebP | Glyph min, JPEG | Glyphs under |
 |---|---|---|---|---|---|
-| Subtitle | 375x812, 375x667, 1280, 1440, 1920, 2560 | 3.0 | 3.58 at every one | 3.58 to 3.63 | 0% |
+| Subtitle | 375x812, 375x667, 1280, 1440, 1920, 2560 | 3.0 | 3.59 at 375x812, 3.58 at the other five | 3.58 to 3.63 | 0% |
 | Credit | same | 4.5 | 11.55 at every one | 11.55 | 0% |
 | Credit link | same | 4.5 | 11.55 at every one | 11.55 to 11.57 | 0% |
 
@@ -183,6 +183,13 @@ Added by this plan:
 - `tools/make_og_card.py`: `SCRIM`, the subtitle fill, docstring "rgba(0, 0, 0, 0.4)".
 - `img/og-card.jpg`: regenerated.
 - `tools/optimize_images.py`: comment "40 percent black scrim" to 50 (comment only).
+- `CLAUDE.md`: the Responsive Hero Background paragraph's "40 percent scrim", the share
+  card section's `rgba(0, 0, 0, 0.4)` and "175.0 KB", the Accessibility section (one bullet
+  on hero text contrast and why it is computed against white under the scrim), and the
+  verify_seo_a11y description (hero text joins the computed contrast checks).
+- Step 6 adds `check_hero_text_cannot_be_overridden()` and
+  `check_share_card_mirrors_hero_colors()` to `tools/verify_seo_a11y.py`, the share card
+  fills to the `make_og_card.py` docstring, and their description and limits to CLAUDE.md.
 
 Departure, made while implementing: every comment and doc sentence that named the scrim's
 alpha ("40 percent scrim", `rgba(0, 0, 0, 0.4)`) and the share card's size ("175.0 KB") now
@@ -193,10 +200,6 @@ verifier pins the numbers, so prose that repeats them can only go stale. This ap
 `make_og_card.py` docstring, the `optimize_images.py` comment, and both CLAUDE.md passages.
 The credit and credit link lines in `check_hero_text_contrast()` extend the house format with
 "and the backing" in the parenthetical, since their surface has two layers.
-- `CLAUDE.md`: the Responsive Hero Background paragraph's "40 percent scrim", the share
-  card section's `rgba(0, 0, 0, 0.4)` and "175.0 KB", the Accessibility section (one bullet
-  on hero text contrast and why it is computed against white under the scrim), and the
-  verify_seo_a11y description (hero text joins the computed contrast checks).
 
 ## Order of work
 
@@ -210,6 +213,20 @@ The credit and credit link lines in `check_hero_text_contrast()` extend the hous
 3. `make_og_card.py` changes, then `python3 tools/make_og_card.py`; record its output line.
 4. Docs and comments listed above.
 5. Full gate, Lighthouse, browser measurement after, regression screenshots.
+6. Hardening round, added after review. Two reviewers found `check_hero_text_contrast()`
+   could pass vacuously: it reads one rule per target, so a scrim in `::after` or `@media`, a
+   later duplicate declaration, a `#credit p` or breakpoint color, a link color from
+   `.home-1 a` or the global `a` rule, a hover rule dropping the underline, a selector that
+   never names `.typer-title`, opacity, text fill, a lighter or smaller subtitle, an alpha hex,
+   or a share card fill out of step all passed (`#ffff` crashed it). That check stays frozen.
+   New checks, written red-first against mutated archive copies (M1 to M13 in Proof):
+   `check_hero_text_cannot_be_overridden()`, a heuristic selector matcher over each target's
+   real ancestor chain that requires every declaration able to win in some state to agree
+   with the measurement, and `check_share_card_mirrors_hero_colors()`. Narrowing fixes to
+   shared helpers: `declared_color` and `declared_hex` take exactly 3 or 6 hex digits, and
+   `style_rules` cuts a prelude at its last top-level semicolon so a statement at-rule no
+   longer swallows the next rule. No production file changed in this round; the CSS was
+   already sound.
 
 ### check_hero_text_contrast(), specified
 
@@ -269,9 +286,25 @@ the %.2f scrim), at or above %.1f:1"`.
 | Link distinguishable without color | computed `text-decoration-line: underline` on `#credit a` in the drive; verifier underline line; screenshot |
 | verify_seo_a11y checks both, six verifiers pass | red run output (step 1), green full gate |
 | Verifier catches regressions | mutation runs, each must FAIL: scrim back to 0.4; subtitle back to `#bfbfbf`; `#credit` background removed; underline removed; a `@media` rule setting `.typer-title` color `#bfbfbf`; `SCRIM = 0.4` in make_og_card.py |
+| No rule can override what was measured (step 6) | mutations M1 to M13, each on a fresh archive copy, each must FAIL naming the rule (M13 must PASS): M1 `@media` `.home-1:after` scrim 0.1; M2 `.home-1::after` scrim 0.1; M3 `background` after `background-color` in `.home-1:after`; M4 `@media` `#credit { background: none; color: #777 }`; M5 `#credit p { color: #666 }`; M6 a second `background` or `color` at the end of `#credit`; M7 link color #555 or #222 from `.home-1 a`, `#home #credit a`, or the global `a` rule; M8 `#credit a:hover, #credit a:focus` or a later `#credit a` with `text-decoration: none`; M9 `#home .table-cell h2 { color: #999 }`; M10 subtitle weight 400, opacity .4, text fill #999, or a 16px `@media` size; M11 `#ffffff22`, `#f2f2f230`, `#ffff` (no traceback); M12 card subtitle fill (233, 233, 233); M13 a prepended `@import` |
 | og card | `make_og_card.py` output line; verifier dimension and budget lines |
 | Lighthouse | accessibility and SEO 100 on index.html (port other than 8000) |
 | No regression | before/after full-viewport screenshots at 375x812 and 1440x900; nav sticky state after scroll unchanged |
+
+### After (branch, served on 127.0.0.1:8735, no injection)
+
+Glyph min per viewport, from `scratchpad/issue34/after/results.json`. Every row has 0% of
+glyphs under its threshold, and every figure equals the approved preview's
+(`scratchpad/issue34/candA50/results.json`).
+
+| Text | Need | Format | 375x812 | 375x667 | 1280x800 | 1440x900 | 1920x1080 | 2560x1440 |
+|---|---|---|---|---|---|---|---|---|
+| Subtitle | 3.0 | WebP | 3.59 | 3.58 | 3.58 | 3.58 | 3.58 | 3.58 |
+| Credit | 4.5 | WebP | 11.56 | 11.55 | 11.55 | 11.55 | 11.55 | 11.55 |
+| Credit link | 4.5 | WebP | 11.56 | 11.55 | 11.55 | 11.55 | 11.55 | 11.55 |
+| Subtitle | 3.0 | JPEG | 3.59 | 3.60 | 3.63 | 3.59 | 3.60 | 3.63 |
+| Credit | 4.5 | JPEG | 11.55 | 11.55 | 11.55 | 11.55 | 11.55 | 11.55 |
+| Credit link | 4.5 | JPEG | 11.55 | 11.55 | 11.55 | 11.55 | 11.55 | 11.57 |
 
 Before screenshots: `scratchpad/issue34/before/webp-<vp>-hero.png` (and `jpeg-...`), side by
 side with the preview at `scratchpad/issue34/compare-1440x900.png` and

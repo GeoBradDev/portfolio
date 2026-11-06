@@ -626,11 +626,11 @@ every `sameAs` profile the page also links; every image has alt text that is not
 every link and button has an accessible name and every decorative icon is `aria-hidden`; every
 `target="_blank"` states a `rel`; every contact control has a label and the five FormSubmit field
 names are intact; the skip link is the first focusable element and the focus ring is visible;
-card text and focus rings clear their WCAG thresholds; and the hero subtitle and photo credit clear
-theirs against a white photo pixel under the scrim, with the credit link underlined and the share
-card's scrim matching the hero's. Standard library only. Run it after
-touching any page's `<head>`, a link or icon, the contact form, the focus or skip-link CSS, a
-card color, or the hero scrim or hero text colors.
+card text and focus rings clear their WCAG thresholds; the hero subtitle and photo credit clear
+theirs against a white photo pixel under the scrim, no other rule can repaint, fade, shrink, or
+un-underline them, and the share card's scrim and text fills match the hero's. Standard library
+only. Run it after touching any page's `<head>`, a link or icon, the contact form, the focus or
+skip-link CSS, a card color, or any rule that reaches the hero.
 
 Things about it worth knowing before editing:
 
@@ -640,15 +640,27 @@ Things about it worth knowing before editing:
 - **`robots.txt` must not `Disallow` a noindex page,** and the verifier asserts it does not. A
   Disallow defeats the page's own `noindex`: the crawler is refused the file, never reads the tag
   telling it not to list the file, and can still list the URL from an inbound link alone.
-- **Contrast is computed, not asserted.** Both checks read the colors out of the file and
-  calculate the ratio, so changing a color rechecks it rather than replaying a stored number.
-  Text is held to 4.5:1 and focus rings to the 3:1 that WCAG 2.2 SC 1.4.11 puts on non-text.
-  Both read `css/style.css`. The hero text check is computed the same way, against a surface
-  composited from the declared layers over white rather than a color any one rule states. The card colors used to be read out of `index.html`, where the
+- **Contrast is computed, not asserted.** Every contrast check reads the colors out of
+  `css/style.css` and calculates the ratio, so changing a color rechecks it rather than replaying
+  a stored number. Normal-size text is held to 4.5:1, large text (bold at 18.66px or more) to 3:1,
+  and focus rings to the 3:1 that WCAG 2.2 SC 1.4.11 puts on non-text. Where text sits on the
+  hero photo, the surface is composited from the declared layers over a white pixel rather than
+  read from any one rule. The card colors used to be read out of `index.html`, where the
   card CSS lived as a string in JavaScript; issue #20 moved the CSS and this with it.
   `.portfolio-error` joined the list then, and declares its own `background` for a reason:
   `#portfolio` paints a gradient, and a ratio can only be computed against a color the rule
   states.
+- **The hero checks match selectors heuristically; they are not a cascade resolver.**
+  `check_hero_text_contrast` reads one rule per hero target, so
+  `check_hero_text_cannot_be_overridden` guards it: for the scrim, the subtitle, the credit, its
+  paragraph, and its link, it takes the element's real ancestors from `index.html`, finds every
+  rule at any at-rule depth whose selector can match, ranks declarations by `!important`,
+  specificity, and source order, and requires every one that can win in some state (a breakpoint,
+  `:hover`) to agree with what was measured. One rule declaring a property twice fails outright.
+  It follows descendant and child combinators, assumes sibling combinators and pseudo-classes can
+  match, and reads color, background, opacity, text fill, font size and weight, text decoration,
+  and the scrim's `content` and `display`; `filter`, blend modes, `all`, and custom properties are
+  outside it. A change there needs the browser measurement, not just the gate.
 - **The focus ring check knows which surface each ring lands on.** This is not hypothetical: the
   first draft painted the ring white over the footer and the nav on the strength of a comment
   calling the footer dark. `.footer` is `#f1f1f1` and `.nav-sticky` repaints the nav `#fff` past
@@ -731,13 +743,16 @@ python3 tools/make_og_card.py
 
 Rebuilds `img/og-card.jpg` from `img/hero-1280.jpg`: a cover-crop to the 1.91:1 every unfurler
 expects, under the same scrim `.home-1:after` paints over the hero, with the hero's own two lines
-of copy over it in the hero's own colors. The script's `SCRIM` must equal the alpha in that rule,
-and `verify_seo_a11y.py` fails when they differ, so a scrim change means regenerating the card. A shared link then previews as the top of the site instead
-of drifting away from it. Requires Pillow, run by hand, never part of the gate.
+of copy over it in the hero's own colors. The script's `SCRIM` must equal the alpha in that rule
+and its headline and subtitle fills must equal the colors `#home h1` and `#home .typer-title`
+declare; `verify_seo_a11y.py` fails when any of them differ, so changing the scrim or either color
+means regenerating the card. A shared link then previews as the top of the site instead of
+drifting away from it. Requires Pillow, run by hand, never part of the gate.
 
 It is a JPEG even though issue #19 asked for a PNG. The card is a photograph: lossless PNG at
 1200x630 lands near a megabyte, five times the 200 KB budget the same issue sets, and quantizing
-to fit bands the sky and the water. Every unfurler accepts JPEG. `verify_seo_a11y.py` asserts the dimensions and the budget, so any replacement has to hold both.
+to fit bands the sky and the water. Every unfurler accepts JPEG. `verify_seo_a11y.py` asserts the
+dimensions and the budget, so any replacement has to hold both.
 The page sets Lato, which is fetched from Google Fonts and is not on disk, so the script falls
 back through Open Sans, Liberation Sans, and DejaVu Sans; the card is generated once and
 committed, so that chain only has to resolve on whichever machine regenerates it.
