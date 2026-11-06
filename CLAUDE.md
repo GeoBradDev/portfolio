@@ -199,9 +199,12 @@ target down by the whole grid. Two mechanisms hold it, and each covers what the 
   that is the only `overflow-anchor` the stylesheet may declare. Under the fixed header, the strip
   the header covers shows this section's bottom padding, so Chromium picks `#portfolio` itself as
   the scroll anchor; it is the element that changes height and its top never moves, so nothing is
-  compensated. Excluding it makes the browser anchor to the section below, which covers the error
-  and empty states, a stale card count, and a browser without CSS `round()`. That was measured in
-  Chromium; Firefox also supports scroll anchoring but was not measured here.
+  compensated. Excluding it makes the browser anchor to the section below. That covers the error
+  and empty states only, where the status row keeps the exclusion on while the reservation
+  collapses. It does not cover a stale card count or a browser without CSS `round()`: on success
+  the exclusion lifts in the same frame the cards replace the placeholder, so nothing compensates
+  and the reservation alone has to be right. That was measured in Chromium; Firefox also supports
+  scroll anchoring but was not measured here.
 - **Never make that exclusion permanent.** Once the cards render, `#portfolio` has to be an
   anchor candidate again: with the exclusion on `#portfolio` itself, a visitor reading a card had
   no anchor, and anything that changed height above the section, a late font, a reflow, a
@@ -209,9 +212,11 @@ target down by the whole grid. Two mechanisms hold it, and each covers what the 
   placeholder alone, the exclusion lifts in the same frame the reservation collapses and the
   error and empty deep links jump. A browser without `:has()` drops the rule and keeps ordinary
   anchoring.
-- Safari has no scroll anchoring, so there the reservation alone carries the success path, a
-  stale `--portfolio-cards` lands deep links off by the change in rows, and the error and empty
-  states still move a deep link by the collapsed reservation. That residual is accepted.
+- A stale `--portfolio-cards` lands deep links off by the change in rows in every browser, which
+  is why the gate fails on it. A browser with `:has()` but without `round()` gets the original
+  offset on success, since neither the reservation nor the exclusion is active there. Safari has
+  no scroll anchoring, so its error and empty states still move a deep link by the collapsed
+  reservation. Both residuals are accepted.
 
 **Comments in that inline `<script>` must not contain the literal strings
 `api.github.com`, `portfolioCSS`, or `insertAdjacentHTML`.** `verify_portfolio.py` strips
@@ -854,8 +859,8 @@ in their description. To add one:
 
 Step 2 is not optional and nothing does it for you. Tagging a repo and stopping there
 changes nothing on the site. Skipping step 3 fails the gate, and if it shipped, deep links
-below the portfolio would land off by the change in rows in a browser without scroll anchoring
-(Safari) whenever the change alters the row count.
+below the portfolio would land off by the change in rows in every browser whenever the change
+alters the row count.
 
 A repo will not appear if it is archived, and its "Live Demo" button will not appear if its
 homepage does not answer. Both are deliberate; the generator prints a `WARN` naming the

@@ -22,6 +22,9 @@ from that commit until the production fix passes it. After green, three of its f
 were reworded without changing any assertion (D1): they said a broken count or a missing
 placeholder lands deep links off in every browser, but Chromium compensates through anchoring
 while the exclusion is on (measured as B1), so they now name browsers without scroll anchoring.
+That correction was itself wrong once the exclusion was scoped: B1 measured the permanent
+exclusion, and the scoped one lifts in the frame the cards render, so on success nothing
+compensates in any browser. Round 2 put the "every browser" wording back (finder3 F1).
 
 Round 2 review: directed by the orchestrator on 2026-11-05. The check is revised again in its own
 red commit (F3 item borders, F4 the generator reading `7 !important` as 7, N1 messages that print
@@ -88,7 +91,8 @@ widths, including the error and empty states, CLS on `/#contact` drops to 0.0013
    success. With JavaScript off no loading line is written, so nothing is reserved. Option 1 then
    covers what reservation cannot: the error and empty states, where the reservation must collapse,
    a card count that drifted, and a browser without CSS `round()` (Chrome 125, Firefox 118, Safari
-   15.4), where the declaration is invalid and `min-height` falls back to `auto`.
+   15.4), where the declaration is invalid and `min-height` falls back to `auto`. (Superseded in review: once the exclusion was scoped to the
+   placeholder and the status rows, it covers only the error and empty states; see Risks.)
 
 Prototyped by injection (`proto_both.txt`): all C1 and C2 cases pass, error and empty deep links
 stay within 0.3 px. Its CLS figures on `/#contact` are an artifact of injecting the style at
@@ -295,6 +299,18 @@ Browser, `probe40.py` plus the width sweep:
   to accept: in the error and empty states the exclusion stays, so a visitor looking at the
   portfolio heading with `#contact` also in view keeps `#contact` fixed and the heading moves.
   The status row is a single line, so there is little to read there. Rare state, rare view.
+- Accepted residual (finder3 F2): in the error and empty states, a viewport wholly inside
+  `#portfolio` with `#contact` out of view has no anchor candidate, so a size change above the
+  section moves the status row (+200 px for 200 px added inside `#about` at 812x220 and 375x180;
+  0 on main). It needs a viewport shorter than the section and a late layout change above it, in
+  a state that is already a failure.
+- Known limit (finder3 F1): the scoped exclusion does not cover the success path. It lifts in the
+  same frame the cards replace the placeholder, so a stale `--portfolio-cards` misplaces deep
+  links in every browser by the change in rows (CSS 7 with 3 cards: -591.77 / -224.05 at 375 /
+  1440; with 10: 930.23 / 349.95; with 16: 2790.23 / 1049.95), which is why the gate fails on
+  drift. A browser with `:has()` but without `round()` (Chromium 105 to 124) has neither the
+  reservation nor the exclusion active on success and gets the original offset (2063.23 /
+  942.95). B1 above measured the permanent exclusion of the first version and no longer holds.
 - A visitor who zooms text only (minimum font size) does not change px heights; the card height is
   fixed px and its content is clipped, so the reservation still matches.
 - The riskiest step is the source check's precision: earlier runs found checks that passed
