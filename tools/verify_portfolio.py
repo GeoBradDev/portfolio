@@ -790,7 +790,7 @@ def check_generator_main_warns(build_projects):
              for name in ("fetch_repos", "probe", "OUTPUT", "STYLESHEET")}
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            build_projects.fetch_repos = lambda account: [repo]
+            build_projects.fetch_repos = lambda account: [repo] if account == build_projects.ACCOUNTS[0] else []
             build_projects.probe = lambda url: False
             build_projects.OUTPUT = Path(tmp) / "projects.json"
             build_projects.STYLESHEET = Path(tmp) / "style.css"

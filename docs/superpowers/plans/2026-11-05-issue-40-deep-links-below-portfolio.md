@@ -10,6 +10,12 @@ three answers: both mechanisms (reservation plus `overflow-anchor`); the card co
 generation time without editing the stylesheet; the Safari-only error and empty residual is
 accepted and stated in the PR body.
 
+Frozen-test rewrite: approved on 2026-11-05 by the orchestrator on the owner's behalf. The fake
+fetcher in `check_generator_main_warns` returned the repo for every entry in `ACCOUNTS`, so the
+real `main()` wrote 2 cards and both of its assertions, which expect 1, failed against correct
+production code. A fixture bug in the test's own setup. Only the fetcher changed, to return the
+repo for the first account alone; no assertion changed.
+
 Domain skills: none applicable. frontend-design: not applicable because nothing visible changes
 once the cards render; the only visible difference is a taller loading placeholder. The
 chrome-devtools MCP skills: not applicable because that server is not connected this session; the
@@ -255,6 +261,16 @@ Browser, `probe40.py` plus the width sweep:
 | 5 | width sweep: reserved height vs rendered grid height at 375, 768, 769, 800, 992, 993, 1200, 1440 |
 | 6 | `#portfolio` height in error, empty, and JavaScript-off states, before and after |
 | 7 | mutations M1 and M2; the generator WARN via check 6 and mutations M18 to M20 |
+
+Red proof for the rewritten test, run in a scratch worktree at the merge base 1fc42e2 with only
+the rewritten `tools/verify_portfolio.py` applied (`scratchpad/issue40/red2_portfolio.txt`): exit
+1, 15 FAILs, every one a missing feature, ending at "tools/build_projects.py defines
+stylesheet_card_count_warning". The main-run checks are not reached there, so two partial
+generators on the same tree show they fail for the right reason: with the helper alone
+(`red2_fn_only.txt`) the only new FAIL is the missing `STYLESHEET`; with the helper and
+`STYLESHEET` but no call in `main()` (`red2_no_wiring.txt`) the only new FAIL is "main() warns
+when the stylesheet says 7 and it writes 1 card", while "stays quiet when the stylesheet says 1"
+passes, which shows the fetcher now yields exactly 1 card.
 
 The issue #31 drives (`impl/drive.py`, `impl/drive2.py`, adapted copies in `issue40/`) run before
 and after with the same PASS set; `drive2.py` covers the empty and error states at 375, 767, 768,
