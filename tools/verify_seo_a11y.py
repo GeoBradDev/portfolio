@@ -1738,6 +1738,234 @@ def check_text_contrast():
         )
 
 
+# The photo under the hero cannot be read from source, so the hero text is
+# measured against the brightest pixel any photo can contain. That is the real
+# worst case, not a theoretical one: the browser measurement for issue 34 found
+# the subtitle crossing sun glints on the water at effectively pure white, at
+# every viewport and in both the WebP and the JPEG.
+HERO_WORST_PHOTO_PIXEL = "#ffffff"
+
+# The hero subtitle is 22px, 26px from 768px up, at a computed weight of 700.
+# Bold at 18.66px or more is large text under WCAG, so its bar is 3:1.
+HERO_LARGE_TEXT_MINIMUM = 3.0
+
+OG_CARD_SCRIPT = ROOT / "tools" / "make_og_card.py"
+
+BLACK_RGBA = re.compile(
+    r"^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*([-+]?\d*\.?\d+)\s*\)$"
+)
+
+
+def style_rules(css, nested=False):
+    """Every style rule as (selector list, declarations, nested), at any depth.
+
+    A small brace walker, the same shape as verify_interactivity.css_rules: it
+    descends into any at-rule block, so a rule inside a breakpoint is listed
+    like any other, with `nested` true.
+    """
+    rules = []
+    index = 0
+    while index < len(css):
+        brace = css.find("{", index)
+        if brace == -1:
+            break
+        prelude = css[index:brace].strip()
+        depth, end = 1, brace + 1
+        while depth and end < len(css):
+            if css[end] == "{":
+                depth += 1
+            elif css[end] == "}":
+                depth -= 1
+            end += 1
+        body = css[brace + 1:end - 1]
+        if prelude.startswith("@"):
+            rules.extend(style_rules(body, True))
+        else:
+            rules.append((prelude, body, nested))
+        index = end
+    return rules
+
+
+def declaration(body, prop):
+    """The raw value of `prop` in a declaration block, or None."""
+    match = re.search(r"(?<![-\w])%s\s*:\s*([^;}]*)" % re.escape(prop), body)
+    return match.group(1).strip() if match else None
+
+
+def black_alpha(value):
+    """A from `rgba(0, 0, 0, A)`, or None when the value is anything else."""
+    if value is None:
+        return None
+    match = BLACK_RGBA.match(value.strip())
+    return float(match.group(1)) if match else None
+
+
+def over(top, alpha, bottom):
+    """`top` at `alpha` composited over `bottom`, both #rrggbb, in sRGB.
+
+    Per channel in 0-255 sRGB, which is how browsers layer background-color
+    (non-linear blending), rounded and formatted so contrast_ratio reads it.
+    """
+    top = top.lstrip("#")
+    bottom = bottom.lstrip("#")
+    channels = []
+    for i in (0, 2, 4):
+        upper = int(top[i:i + 2], 16)
+        lower = int(bottom[i:i + 2], 16)
+        channels.append(int(round(upper * alpha + lower * (1 - alpha))))
+    return "#%02x%02x%02x" % tuple(channels)
+
+
+def selector_list_has(selectors, wanted):
+    """True when one comma-separated selector in the list is exactly `wanted`."""
+    return any(
+        re.sub(r"\s+", " ", part.strip()) == wanted for part in selectors.split(",")
+    )
+
+
+def check_hero_text_contrast():
+    """Hero text clears its threshold against white under the scrim (issue 34).
+
+    The subtitle and the photo credit sit on a photograph, which neither axe
+    nor Lighthouse can measure and no source check can read. What source can
+    bound is the worst case: the brightest pixel a photo can hold is white, and
+    every layer between it and the text is declared here. So the check takes
+    white, composites the .home-1:after scrim over it, then the credit's own
+    backing for the credit, and holds each text color to its WCAG threshold
+    against the result. Raising the scrim, changing a text color, or dropping
+    the credit's backing all recheck automatically.
+
+    Only flat black rgba layers can be proven this way. A gradient, image, or
+    colored scrim fails the parse rather than passing silently, which forces
+    this check to be rewritten alongside it.
+
+    The credit link must also be underlined, so it is told apart from the
+    credit text without relying on color (SC 1.4.1). And make_og_card.py's
+    SCRIM must equal the CSS scrim, so the share card cannot drift from the
+    hero again.
+    """
+    print("\nHero text contrasts with the brightest photo pixel under the scrim")
+
+    css = read_or_fail(STYLE_CSS)
+    if css is None:
+        return
+    css = without_comments(css, "css")
+    rules = style_rules(css)
+
+    scrim_body = rule_body(css, ".home-1:after")
+    if not check(scrim_body is not None, "css/style.css styles .home-1:after"):
+        return
+    scrim = black_alpha(declaration(scrim_body, "background-color"))
+    if not check(
+        scrim is not None and 0 <= scrim <= 1,
+        ".home-1:after paints a black rgba scrim with alpha in [0, 1]",
+    ):
+        return
+    under_scrim = over("#000000", scrim, HERO_WORST_PHOTO_PIXEL)
+
+    # Subtitle.
+    subtitle = rule_body(css, "#home .typer-title")
+    if check(subtitle is not None, "css/style.css styles #home .typer-title"):
+        color = declared_color(subtitle, "color")
+        if check(color is not None, "#home .typer-title declares a hex text color"):
+            ratio = contrast_ratio(color, under_scrim)
+            check(
+                ratio >= HERO_LARGE_TEXT_MINIMUM,
+                "%s is %.2f:1 (%s on %s, white photo pixel under the %.2f scrim), "
+                "at or above %.1f:1"
+                % ("the hero subtitle", ratio, color, under_scrim, scrim,
+                   HERO_LARGE_TEXT_MINIMUM),
+            )
+    # Every rule naming .typer-title, at any @media depth, that sets a color.
+    # The first top-level #home .typer-title rule is the one measured above
+    # and the only one allowed, so neither a breakpoint override nor a later
+    # rule can repaint the subtitle in a color this check never measured.
+    overrides = []
+    measured_seen = False
+    for selectors, body, nested in rules:
+        if ".typer-title" not in selectors or declaration(body, "color") is None:
+            continue
+        if not nested and not measured_seen and selectors == "#home .typer-title":
+            measured_seen = True
+            continue
+        overrides.append(selectors)
+    check(
+        not overrides,
+        "no other rule sets the subtitle's color%s"
+        % ("" if not overrides else " (found: %s)" % "; ".join(overrides)),
+    )
+
+    # Credit.
+    credit = rule_body(css, "#credit")
+    credit_surface = None
+    if check(credit is not None, "css/style.css styles #credit"):
+        credit_color = declared_color(credit, "color")
+        check(credit_color is not None, "#credit declares an opaque hex text color")
+        backing = black_alpha(
+            declaration(credit, "background")
+            or declaration(credit, "background-color")
+        )
+        if check(
+            backing is not None and 0 <= backing <= 1,
+            "#credit declares a black rgba background behind the text",
+        ):
+            credit_surface = over("#000000", backing, under_scrim)
+            if credit_color is not None:
+                ratio = contrast_ratio(credit_color, credit_surface)
+                check(
+                    ratio >= CONTRAST_MINIMUM,
+                    "%s is %.2f:1 (%s on %s, white photo pixel under the %.2f scrim "
+                    "and the %.2f backing), at or above %.1f:1"
+                    % ("the photo credit", ratio, credit_color, credit_surface,
+                       scrim, backing, CONTRAST_MINIMUM),
+                )
+
+    # Credit link.
+    link_rules = [
+        body for selectors, body, _ in rules if selector_list_has(selectors, "#credit a")
+    ]
+    underlined = any(
+        "underline" in (
+            (declaration(body, "text-decoration") or "")
+            + " "
+            + (declaration(body, "text-decoration-line") or "")
+        )
+        for body in link_rules
+    )
+    check(underlined, "#credit a is underlined, so the link does not rely on color")
+    for body in link_rules:
+        if declaration(body, "color") is None:
+            continue
+        link_color = declared_color(body, "color")
+        if not check(link_color is not None, "#credit a declares a hex text color"):
+            continue
+        if credit_surface is None:
+            fail("#credit a has a known background to measure against")
+            continue
+        ratio = contrast_ratio(link_color, credit_surface)
+        check(
+            ratio >= CONTRAST_MINIMUM,
+            "%s is %.2f:1 (%s on %s, white photo pixel under the %.2f scrim "
+            "and the credit backing), at or above %.1f:1"
+            % ("the photo credit link", ratio, link_color, credit_surface,
+               scrim, CONTRAST_MINIMUM),
+        )
+
+    # Share card.
+    script = read_or_fail(OG_CARD_SCRIPT)
+    if script is None:
+        return
+    match = re.search(r"(?m)^SCRIM\s*=\s*([-+]?\d*\.?\d+)\s*$", script)
+    if not check(match is not None, "tools/make_og_card.py declares SCRIM"):
+        return
+    card_scrim = float(match.group(1))
+    check(
+        abs(card_scrim - scrim) < 1e-9,
+        "tools/make_og_card.py's SCRIM (%.2f) equals the hero scrim (%.2f)"
+        % (card_scrim, scrim),
+    )
+
+
 def main():
     check_every_page_is_a_complete_document()
     check_every_page_has_a_description()
@@ -1756,6 +1984,7 @@ def main():
     check_focus_ring_contrast()
     check_site_root_files()
     check_text_contrast()
+    check_hero_text_contrast()
 
     print()
     if failures:
