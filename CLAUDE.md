@@ -627,8 +627,9 @@ every link and button has an accessible name and every decorative icon is `aria-
 `target="_blank"` states a `rel`; every contact control has a label and the five FormSubmit field
 names are intact; the skip link is the first focusable element and the focus ring is visible;
 card text and focus rings clear their WCAG thresholds; the hero subtitle and photo credit clear
-theirs against a white photo pixel under the scrim, no other rule can repaint, fade, shrink, or
-un-underline them, and the share card's scrim and text fills match the hero's. Standard library
+theirs against a white photo pixel under the scrim, no other rule in `css/style.css` that can
+reach them or their ancestors repaints, fades, shrinks, or un-underlines them, and the share card's
+scrim and text fills match the hero's. Standard library
 only. Run it after touching any page's `<head>`, a link or icon, the contact form, the focus or
 skip-link CSS, a card color, or any rule that reaches the hero.
 
@@ -654,13 +655,19 @@ Things about it worth knowing before editing:
   `check_hero_text_contrast` reads one rule per hero target, so
   `check_hero_text_cannot_be_overridden` guards it: for the scrim, the subtitle, the credit, its
   paragraph, and its link, it takes the element's real ancestors from `index.html`, finds every
-  rule at any at-rule depth whose selector can match, ranks declarations by `!important`,
-  specificity, and source order, and requires every one that can win in some state (a breakpoint,
-  `:hover`) to agree with what was measured. One rule declaring a property twice fails outright.
-  It follows descendant and child combinators, assumes sibling combinators and pseudo-classes can
-  match, and reads color, background, opacity, text fill, font size and weight, text decoration,
-  and the scrim's `content` and `display`; `filter`, blend modes, `all`, and custom properties are
-  outside it. A change there needs the browser measurement, not just the gate.
+  rule in `css/style.css` at any at-rule depth whose selector can match, ranks declarations by
+  `!important`, specificity, and source order, and requires every one that can win in some state
+  (a breakpoint, `:hover`) to agree with what was measured. A rule declaring one property twice
+  on a target element fails outright, for the properties that target is measured on; the same
+  pair on an ancestor is an ordinary fallback and passes. It follows descendant and child
+  combinators, assumes sibling combinators and pseudo-classes can match, and reads color,
+  background, opacity, text fill, font size and weight, text decoration, and the scrim's `content`
+  and `display`. Its limits: it does not read inline `style` attributes or `<style>` blocks in
+  `index.html`; it checks the targets and their ancestors but not their descendants, so an
+  element inside the subtitle or the link with its own color is unchecked; it ranks
+  `::first-line` and `::first-letter` by specificity, although a browser lets them win outright;
+  and `filter`, blend modes, `all`, and custom properties are outside it. A change in any of
+  those needs the browser measurement, not just the gate.
 - **The focus ring check knows which surface each ring lands on.** This is not hypothetical: the
   first draft painted the ring white over the footer and the nav on the strength of a comment
   calling the footer dark. `.footer` is `#f1f1f1` and `.nav-sticky` repaints the nav `#fff` past

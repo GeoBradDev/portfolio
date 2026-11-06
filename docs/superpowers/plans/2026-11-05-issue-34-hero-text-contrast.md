@@ -227,6 +227,17 @@ The credit and credit link lines in `check_hero_text_contrast()` extend the hous
    `style_rules` cuts a prelude at its last top-level semicolon so a statement at-rule no
    longer swallows the next rule. No production file changed in this round; the CSS was
    already sound.
+7. Delta round on the step 6 check, on review. Fixes that only narrow false FAILs or close
+   a false PASS, with no existing assertion weakened: the duplicate-declaration rule
+   applies only to the target elements and the property groups each is measured on (D1:
+   fallback pairs on `html`, `body`, `.home-1` passed wrongly as failures); the scrim needs
+   an unconditional `content` that is not none or normal (D2: deleting it passed);
+   `transparent` and `none` pass on layers between the section and the text but still fail
+   on the scrim and the credit's backing (D6); a non-px subtitle size fails with a message
+   that says the unit is unreadable rather than that it is too small (D7). Known limits are
+   documented rather than fixed: `css/style.css` only (no inline styles or `<style>`
+   blocks), targets and ancestors but not descendants, and `::first-line` and
+   `::first-letter` ranked by specificity. No production file changed.
 
 ### check_hero_text_contrast(), specified
 
@@ -287,6 +298,7 @@ the %.2f scrim), at or above %.1f:1"`.
 | verify_seo_a11y checks both, six verifiers pass | red run output (step 1), green full gate |
 | Verifier catches regressions | mutation runs, each must FAIL: scrim back to 0.4; subtitle back to `#bfbfbf`; `#credit` background removed; underline removed; a `@media` rule setting `.typer-title` color `#bfbfbf`; `SCRIM = 0.4` in make_og_card.py |
 | No rule can override what was measured (step 6) | mutations M1 to M13, each on a fresh archive copy, each must FAIL naming the rule (M13 must PASS): M1 `@media` `.home-1:after` scrim 0.1; M2 `.home-1::after` scrim 0.1; M3 `background` after `background-color` in `.home-1:after`; M4 `@media` `#credit { background: none; color: #777 }`; M5 `#credit p { color: #666 }`; M6 a second `background` or `color` at the end of `#credit`; M7 link color #555 or #222 from `.home-1 a`, `#home #credit a`, or the global `a` rule; M8 `#credit a:hover, #credit a:focus` or a later `#credit a` with `text-decoration: none`; M9 `#home .table-cell h2 { color: #999 }`; M10 subtitle weight 400, opacity .4, text fill #999, or a 16px `@media` size; M11 `#ffffff22`, `#f2f2f230`, `#ffff` (no traceback); M12 card subtitle fill (233, 233, 233); M13 a prepended `@import` |
+| Step 7 fixes hold and step 6 does not regress | the M1 to M13 table rerun (all FAIL except M13, which PASSes), plus: D1 `html { font-size: 10px; font-size: 62.5% }`, `body { background: #fff; background-color: #fff }`, `.home-1 { display: block; display: flow-root }` PASS; D2 `content` deleted from `.home-1:after` FAILs; D6 `a { background-color: transparent }`, `#credit p { background: transparent }`, `#credit a:hover { background: none }` PASS, while `transparent` on `.home-1:after` or `#credit` FAILs; D7 a `2.2rem` subtitle size FAILs naming the unit |
 | og card | `make_og_card.py` output line; verifier dimension and budget lines |
 | Lighthouse | accessibility and SEO 100 on index.html (port other than 8000) |
 | No regression | before/after full-viewport screenshots at 375x812 and 1440x900; nav sticky state after scroll unchanged |
