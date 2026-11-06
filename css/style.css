@@ -759,7 +759,7 @@ Home
    The prefixed -webkit-image-set() form is deliberately not used. It cannot express
    a format fallback, so Safari 6 to 13, which support the prefixed function but not
    WebP, would resolve it to a file they cannot decode and paint no hero at all,
-   only the 40 percent scrim from .home-1:after. Serving those browsers a slightly
+   only the 50 percent scrim from .home-1:after. Serving those browsers a slightly
    soft 1280 JPEG is the better failure.
 
    Variants are keyed to viewport width, not device pixel ratio. A 3x phone is still
@@ -782,6 +782,10 @@ Home
     }
 }
 
+/* The scrim is load-bearing for the hero text, not only mood. The subtitle and the
+   photo credit are held to their WCAG thresholds against a white photo pixel under
+   this layer, and tools/verify_seo_a11y.py computes that from the alpha here, so
+   lightening it fails the gate. tools/make_og_card.py mirrors the same alpha. */
 .home-1:after {
     content: "";
     position: absolute;
@@ -789,7 +793,7 @@ Home
     height: 100%;
     top: 0;
     left: 0;
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: rgba(0, 0, 0, 0.5);
     z-index: 0;
 }
 
@@ -863,7 +867,7 @@ Home
 #home .typer-title {
     margin: 10px 0;
     font-size: 22px;
-    color: #bfbfbf;
+    color: #f2f2f2;
     text-transform: uppercase;
 }
 
@@ -1775,14 +1779,29 @@ Footer
     pointer-events: auto;
 }
 
+/* The credit carries its own backing because it is normal-size text on the photo,
+   and the scrim alone cannot lift it to 4.5:1 over a bright pixel. Only the top
+   corners round: the box sits flush on the hero's bottom edge. */
 #credit {
     position: absolute;
     bottom: 0;
     right: 10px;
     font-size: 16px;
-    font-weight: 1000;
-    color: #070606;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 2px 8px;
+    border-radius: 3px 3px 0 0;
     z-index: 10;
+}
+
+/* Without this the global paragraph margin hangs dead dark space under the line. */
+#credit p {
+    margin: 0;
+}
+
+/* The link shares the credit's color, so the underline is what tells it apart. */
+#credit a {
+    text-decoration: underline;
 }
 
 /*----------------------------------------
