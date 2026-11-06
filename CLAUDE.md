@@ -178,7 +178,7 @@ loads from behind one NAT used to blank the section for everyone sharing that ad
   `insertAdjacentHTML` in `index.html`.
 
 **The loading placeholder reserves the grid's final height, and `#portfolio` is out of scroll
-anchoring** (issue 40). `projects.json` arrives after the browser has already scrolled a deep link
+anchoring until the cards render** (issue 40). `projects.json` arrives after the browser has already scrolled a deep link
 such as `/#contact` into place, so a one-line spinner that the cards then replace pushed the
 target down by the whole grid. Two mechanisms hold it, and each covers what the other cannot:
 
@@ -186,18 +186,32 @@ target down by the whole grid. Two mechanisms hold it, and each covers what the 
   `#github-projects`: `--portfolio-cards`, `--portfolio-cols`, `--portfolio-card-height`, and
   `--portfolio-row-gap`. The card layout reads the same four, and the two media queries change
   only the variables, so the reserved box and the rendered grid cannot disagree at any
-  breakpoint. Never give `.portfolio-card` or `.portfolio-item` a literal height, width, column
-  share, or row gap; `verify_portfolio.py` rejects one. The renderer replaces the placeholder on
+  breakpoint. The four variables belong on `#github-projects` alone, in any media query, never on
+  a card, an item, or the placeholder. The card's `height` and the item's `flex`, `max-width`, and
+  `padding` are pinned to their variable-based values, and nothing else may set a height, margin,
+  or box-sizing on a card, an item, or the placeholder, a padding, flex, or width on an item, or a
+  `gap` on `#github-projects`; `verify_portfolio.py` rejects each of those, in any media query.
+  It does not police other properties. The renderer replaces the placeholder on
   success, empty, and error, so the reservation never outlives loading, and with JavaScript off
   no placeholder is written. `--portfolio-cards` is set by hand and must equal the number of
   entries in `projects.json`.
-- `#portfolio` carries `overflow-anchor: none`. Under the fixed header, the strip the header
-  covers shows this section's bottom padding, so Chromium picks `#portfolio` itself as the scroll
-  anchor; it is the element that grows and its top never moves, so nothing is compensated.
-  Excluding it makes Chromium and Firefox anchor to the section below, which covers the error
-  and empty states, a stale card count, and a browser without CSS `round()`. Safari has no
-  scroll anchoring, so there the reservation alone carries the success path, and the error and
-  empty states still move a deep link by the collapsed reservation. That residual is accepted.
+- `#portfolio:has(.portfolio-loading, .portfolio-status)` carries `overflow-anchor: none`, and
+  that is the only `overflow-anchor` the stylesheet may declare. Under the fixed header, the strip
+  the header covers shows this section's bottom padding, so Chromium picks `#portfolio` itself as
+  the scroll anchor; it is the element that changes height and its top never moves, so nothing is
+  compensated. Excluding it makes the browser anchor to the section below, which covers the error
+  and empty states, a stale card count, and a browser without CSS `round()`. That was measured in
+  Chromium; Firefox also supports scroll anchoring but was not measured here.
+- **Never make that exclusion permanent.** Once the cards render, `#portfolio` has to be an
+  anchor candidate again: with the exclusion on `#portfolio` itself, a visitor reading a card had
+  no anchor, and anything that changed height above the section, a late font, a reflow, a
+  rotation, moved the card they were reading. The status rows keep it on purpose: scoped to the
+  placeholder alone, the exclusion lifts in the same frame the reservation collapses and the
+  error and empty deep links jump. A browser without `:has()` drops the rule and keeps ordinary
+  anchoring.
+- Safari has no scroll anchoring, so there the reservation alone carries the success path, a
+  stale `--portfolio-cards` lands deep links off by the change in rows, and the error and empty
+  states still move a deep link by the collapsed reservation. That residual is accepted.
 
 **Comments in that inline `<script>` must not contain the literal strings
 `api.github.com`, `portfolioCSS`, or `insertAdjacentHTML`.** `verify_portfolio.py` strips
@@ -734,10 +748,12 @@ dropped and a non-https one is dropped without probing; the card CSS is in `css/
 neither `portfolioCSS` nor `insertAdjacentHTML` survives in `index.html`; no pictograph
 reaches `index.html` or `projects.json`; and the loading placeholder reserves the grid's final
 height (issue 40): `--portfolio-cards` is declared once, on `#github-projects`, as an integer
-equal to the number of cards, the placeholder's `min-height` is the one reservation formula, the
-card and item rules size themselves from the same variables, `#portfolio` declares
-`overflow-anchor: none`, the renderer still starts with the placeholder, and the generator's
-real `main()`, run offline, warns on drift without writing the stylesheet. Standard library
+equal to the number of cards, the grid variables are set on `#github-projects` alone, the
+placeholder's `min-height` is the one reservation formula, the card and item sizing is pinned and
+nothing else sizes them, the only `overflow-anchor` is the scoped one on
+`#portfolio:has(.portfolio-loading, .portfolio-status)`, the renderer still starts with the
+placeholder, and the generator's real `main()`, run offline, warns on drift without writing the
+stylesheet. Standard library
 only. Run it after touching the renderer, the generator, `projects.json`, or the card CSS.
 
 Things about it worth knowing before editing:
@@ -837,8 +853,9 @@ in their description. To add one:
 4. Commit the changed `projects.json`, and `css/style.css` if step 3 touched it
 
 Step 2 is not optional and nothing does it for you. Tagging a repo and stopping there
-changes nothing on the site. Skipping step 3 lands every deep link below the portfolio a row
-or more off once the cards render.
+changes nothing on the site. Skipping step 3 fails the gate, and if it shipped, deep links
+below the portfolio would land off by the change in rows in a browser without scroll anchoring
+(Safari) whenever the change alters the row count.
 
 A repo will not appear if it is archived, and its "Live Demo" button will not appear if its
 homepage does not answer. Both are deliberate; the generator prints a `WARN` naming the

@@ -318,3 +318,11 @@ The issue #31 drives (`impl/drive.py`, `impl/drive2.py`, adapted copies in `issu
 and after with the same PASS set; `drive2.py` covers the empty and error states at 375, 767, 768,
 and 1440. The live drive must show `#contact` within 2 px of the header bottom after the cards
 render at both widths, and the error state's deep link within 2 px in Chromium.
+
+Round 1 proof (Chromium, base origin/main vs branch, `scratchpad/issue40/r1/`): finder2's
+reading-the-cards scenarios now match main. 200 px added inside `#about` moves the card under the
+viewport middle 0 px on both, paragraph reflow 0 on both, and the 375x812 to 812x375 rotation
+keeps "QuakeGlobe" visible on both. In the error and empty states, 200 px added above with
+`/#portfolio` deep-linked moves the heading 0 on both. `probe40.py` still passes C1 and C2 at both
+widths, and the error and empty `/#contact` deep links land within 0.23 px. The width sweep still
+shows 0 px difference at every width.
