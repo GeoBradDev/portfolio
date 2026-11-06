@@ -664,8 +664,9 @@ def check_grid_reserves_its_final_height():
     check(
         declared is not None,
         "--portfolio-cards is a bare integer (found %r); a unit or a decimal "
-        "makes the reservation invalid, it collapses to one line, and a deep "
-        "link below the portfolio lands a whole grid off" % value,
+        "makes the reservation invalid, it collapses to one line, and in a "
+        "browser without scroll anchoring (Safari) a deep link below the "
+        "portfolio lands off by the whole grid" % value,
     )
     if projects is None:
         fail("projects.json can be read to count the cards; without it nobody "
@@ -698,8 +699,9 @@ def check_grid_reserves_its_final_height():
         len(reserving) == 1,
         "the top-level .portfolio-loading rule's min-height is the grid's final "
         "height, computed from the four grid variables; without it the "
-        "placeholder is one line tall and the cards push a deep-linked section "
-        "down by the whole grid",
+        "placeholder is one line tall and, in a browser without scroll "
+        "anchoring (Safari), the cards push a deep-linked section down by the "
+        "whole grid",
     )
     check(
         not others,
@@ -772,7 +774,8 @@ def check_grid_reserves_its_final_height():
         ) is not None,
         "the renderer writes a .portfolio-loading element as the grid's initial "
         "content (found %r); without it nothing holds the space while loading "
-        "and the cards push a deep-linked section down" % first[:60],
+        "and, in a browser without scroll anchoring (Safari), the cards push a "
+        "deep-linked section down" % first[:60],
     )
 
     # 6. The generator warns when the count it writes drifts from the CSS.

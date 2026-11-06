@@ -18,7 +18,10 @@ repo for the first account alone; no assertion changed.
 
 Round 1 review: directed by the orchestrator on 2026-11-05. The check is revised in its own red
 commit (R1 and V1 to V6 below) after the first freeze was lifted on green, and is frozen again
-from that commit until the production fix passes it.
+from that commit until the production fix passes it. After green, three of its failure messages
+were reworded without changing any assertion (D1): they said a broken count or a missing
+placeholder lands deep links off in every browser, but Chromium compensates through anchoring
+while the exclusion is on (measured as B1), so they now name browsers without scroll anchoring.
 
 Domain skills: none applicable. frontend-design: not applicable because nothing visible changes
 once the cards render; the only visible difference is a taller loading placeholder. The
