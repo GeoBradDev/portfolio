@@ -91,7 +91,8 @@ Made checkable:
 
 ## Files that change
 
-- `tools/verify_interactivity.py`: new `check_no_script_removed_overlay(html, css, js)`,
+- `tools/verify_interactivity.py`: new `check_no_script_removed_overlay(css, js)`, which reads every
+  root `*.html` page itself through `HTML_PAGES`,
   called from `main()`; module docstring gains an issue 32 paragraph.
 - `index.html`: delete the loader markup and its `<!-- Loader -->` / `<!-- End Loader -->`
   comments; delete the renderer's `finally { ... }` block (the `try`/`catch` stays intact).
@@ -106,9 +107,14 @@ Made checkable:
   only the `requestAnimationFrame` that adds `smooth-scroll`. Its comment loses nothing it
   needs; the file header comment needs no change (it does not mention the loader).
 - `CLAUDE.md` (Phase 8): drop "the loader fade" from the js/main.js summary; drop
-  `.loader-con at 99` from the skip-link bullet; add one bullet under Accessibility stating
-  the rule (nothing covers the page by default and waits for script to uncover it; issue
-  32 deleted the loader for that reason; `verify_interactivity.py` enforces it).
+  `.loader-con at 99` from the skip-link bullet; add one bullet stating the rule (nothing
+  covers the page by default and waits for script to uncover it; issue 32 deleted the
+  loader for that reason; `verify_interactivity.py` enforces it). Placed in the js/main.js
+  "Invariants that are easy to break by accident" list, not under Accessibility as first
+  planned: the Accessibility header says `verify_seo_a11y.py` holds all of its bullets, and
+  this rule is held by `verify_interactivity.py`. Also replace the pinned homepage total
+  (339.5 KB), which this branch makes false (the verifier now prints 339.9 KB), with a
+  sentence that points at the verifier's printed figure instead of pinning a new one.
 
 ## Order of work
 
